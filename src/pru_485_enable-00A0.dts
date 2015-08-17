@@ -1,0 +1,66 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+        compatible = "ti,beaglebone", "ti,beaglebone-black";
+
+        /* identification */
+        part-number = "485-BBB";
+        version = "00A0";
+
+        /* state the resources this cape uses */
+        exclusive-use =
+                // PRU resources used
+                "pruss",
+                "pru1",
+                // PRU Input pins
+		                "P8.46","pr1_pru1_pru_r31_1", // MISO
+				"P8.39","pr1_pru1_pru_r31_6", // IRQ
+				"P8.27","pr1_pru1_pru_r31_8", // SYNC
+                // PRU Output pins
+				"P8.45","pr1_pru1_pru_r30_0", // CLK
+				"P8.43","pr1_pru1_pru_r30_2", // CS
+                "P8.41","pr1_pru1_pru_r30_4"; // MOSI
+
+    // MUX Bit Maps:
+    // 0x40 = slow slew (0 = fast slew)
+    // 0x20 = input (0 = output)
+    // 0x10 = pullup, 0x08 = disabled (0 = pulldown)
+    // 0x01 to 0x07 = mode 1 to 7
+    fragment@8 {
+        target = <&am33xx_pinmux>;
+        __overlay__ {
+
+            pruss_pins: pruss_pins {
+                pinctrl-single,pins = <            
+					0x0a4 0x36
+					0x0b8 0x36
+					0x0e0 0x36
+					0x0a0 0x0D
+					0x0a8 0x0D
+					0x0b0 0x0D
+                >;
+            };
+        }; 
+    };
+
+    fragment@10 {
+        target = <&pruss>;
+        __overlay__ {
+            status = "okay";   // This enables the PRU
+            pinctrl-names = "default";
+            pinctrl-0     = <&pruss_pins>; // This uses our custom mapping (see above definition)
+
+            // This is for documentation only.  You can see the pin mappings by:
+            // sudo cat /sys/kernel/debug/gpio
+            any_name1 {  // Grouping of pins under this name
+                pin-names     = "Input pin description";     // one name per pin defined in gpios.  Multiple entries are comma seperated;  
+                gpios         = <&gpio4 14 1>; // &gpio? (One based: 1-4 instead of 0-3) bit(0-31) input(1)/output(0).  Multiple entries seperated by a space
+            };            
+            any_name2 {
+                pin-names     = "Output pin description";        
+                gpios         = <&gpio2 19 0>;
+            };            
+        };
+    };
+};  
