@@ -43,17 +43,9 @@
 #define MDR                     0x34    // Mode Definition Register
 #define MSR                     0x18
 #define MSR_DCTS_BIT        	0x00
-#define WAIT_TIME 		15000000
 #define RAM1_SIZE_LOW		0
 #define RAM1_SIZE_HIGH		32
-#define MAX_BYTES_TO_SEND	16
-#define MAX_BYTES_TO_RECEIVE 	10
 
-
-.macro PULSE
-    set CLK
-    clr CLK
-.endm
 
 
 .macro SHRAM_CONFIG

@@ -35,7 +35,7 @@
 #define MODE_1						0x90	// MODE 1 ----
 #define MODE_2						0x80	// MODE 2 ---- EchoSuppr
 #define LCR							0x03	// LCR
-#define RXTIMEOUT					0x03	// RxTimeOut -- 2 words
+#define RXTIMEOUT					0x02	// RxTimeOut -- 2 words
 #define	HDPLXDELAY					0x11	// HDplxDelay -- 1 bit
  
 #define CLOCK_CONFIG_ADDRESS		0x9a	// CLOCK_WRITE_END
@@ -565,10 +565,7 @@ STORE_LAST64_MEMORY:
 // ----- TIMEOUT e NO RESPONSE - Tratamento de dados ----------------------------------------------
 TIMEOUT_AND_NORESPONSE:
 
-	// Store valor de I											------ SOMENTE PARA ANALISE - valor do timeout
-	SBCO I, SHRAM_BASE, 5, 4								//  ------ SOMENTE PARA ANALISE - valor do timeout
-
-	ZERO	&I, 4
+		ZERO	&I, 4
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4			// Tamanho = 0x00
 	JMP		DATA_READY										// Finaliza execucao do comando
 // ------------------------------------------------------------------------------------------------
