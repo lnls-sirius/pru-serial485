@@ -127,8 +127,11 @@ START:
 
 PROCEDURE_START:
 
-	READ_ISR	
+	READ_ISR
+	READ_LSR	
 
+	
+ 
 // ~~~~~ Verifica modo de operacao ~~~~~~~~~
 OPERATION_MODE:
 	ZERO	&I, 4
@@ -137,7 +140,7 @@ OPERATION_MODE:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	
 	
-	
+
 	
 	
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
@@ -183,6 +186,10 @@ LOOP_DELAY:
 // ----- PROCEDIMENTO CONSTANTE -------------------------------------------------------------------
 // Verifica se os dados já estão prontos para serem enviados: SHRAM[1] = 0xFF
 WAIT_FOR_DATA:
+
+	//Teste:
+	SEND_SPI 0xaa,8	 
+
 	LBCO	I, SHRAM_BASE, 1, 1
 	QBNE	OPERATION_MODE, I.b0, 0xff						// Se not ready, verifica condicao de sincronismo
 	
@@ -248,6 +255,7 @@ LOAD_FROM_MEMORY:
 // ~~~~~~ Comando "RECEBER CURVA"? ~~~~~~~~~
 	LBCO	I, SHRAM_BASE, OFFSET_SEND_COMMAND, 1			// Verify if command == 0x40 (receber bloco de curva)
 	QBEQ	RECEIVE_CURVA, I.b0, 0x40						// then goes to RECEIVE_CURVA. If not, continue.
+	QBEQ	RECEIVE_CURVA, I.b0, 0x08
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	
@@ -259,11 +267,11 @@ LOAD_FROM_MEMORY:
 	
 // ~~~~~ Response required? ~~~~~~~~~~~~~~~~
 //	LBCO	I, SHRAM_BASE, OFFSET_SEND_COMMAND, 1			// Verify if command == 0x50. Already loaded from memory on previous instruction
-	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x50		
-	LBCO	I, SHRAM_BASE, 0x6c, 1							// Offset "ID" in an 0x50 instruction
-	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x00					// Reset ID = 0x00
+//	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x50		
+//	LBCO	I, SHRAM_BASE, 0x6c, 1							// Offset "ID" in an 0x50 instruction
+//	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x00					// Reset ID = 0x00
 	
-	JMP		TIMEOUT_AND_NORESPONSE							// Reset function. No response required.
+//	JMP		TIMEOUT_AND_NORESPONSE							// Reset function. No response required.
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~				// Response required: continue on next block
 
  
@@ -272,13 +280,9 @@ LOAD_FROM_MEMORY:
 // ~~~~~ Response or timeout ? ~~~~~~~~~~~~~
 WAIT_FOR_RESPONSE:
 // Timeout Config
-	ZERO	&TIMEOUT_VALUE, 4
-	MOV		TIMEOUT_VALUE, 0x1f
-	LSL		TIMEOUT_VALUE, TIMEOUT_VALUE, 8
-	ADD		TIMEOUT_VALUE, TIMEOUT_VALUE, 0xc1
-	LSL		TIMEOUT_VALUE, TIMEOUT_VALUE, 8
-	ADD		TIMEOUT_VALUE, TIMEOUT_VALUE, 0xe2
-	LSL		TIMEOUT_VALUE, TIMEOUT_VALUE, 4					// I = 0x1F C1 E2 0 = 33.300.000 ~ 500ms
+	LBCO	TIMEOUT_VALUE, SHRAM_BASE, 6, 4
+	ZERO	&I, 4
+
 
 LOOP_TIMEOUT:	
 	QBBC	RESPONSE_RECEIVED, IRQ							// Data received? Quit timeout
@@ -294,8 +298,8 @@ RESPONSE_RECEIVED:
 
 // Read Number of words in RxFIFO	
 	CS_DOWN 
-	SEND_SPI 	0x12,8		// RxFIFOLevel address
-	RECEIVE_SPI 8		// Receive data
+	SEND_SPI 	0x12,8										// RxFIFOLevel address
+	RECEIVE_SPI 8											// Receive data
 	SBCO		BUFFER_SPI_IN, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4
 	CS_UP
 	MOV			FIFO_LENGHT, BUFFER_SPI_IN
@@ -564,20 +568,18 @@ STORE_LAST64_MEMORY:
  
 // ----- TIMEOUT e NO RESPONSE - Tratamento de dados ----------------------------------------------
 TIMEOUT_AND_NORESPONSE:
-
-	READ_ISR
-	READ_LSR
 	
 	ZERO	&I, 4
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4			// Tamanho = 0x00
 	JMP		DATA_READY										// Finaliza execucao do comando
 // ------------------------------------------------------------------------------------------------
- 
- 
+  
+    
 
 // ----- DONE - Wait for new data send request ----------------------------------------------------
 DATA_READY:
 	SBCO	0x00, SHRAM_BASE, 1, 1							// Apaga data ready e confirma dados ok
+	
 
 	MOV 	r31.b0, PRU1_ARM_INTERRUPT+16
 	

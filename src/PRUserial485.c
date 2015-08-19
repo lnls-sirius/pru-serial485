@@ -25,6 +25,7 @@
  * prudata[3] = Baudrate (DIVLSB)
  * prudata[4] = Baudrate (DIVMSB)
  * prudata[5] = procedimento sincrono: START (0xFF) ou STOP (0x00)
+ * prudata[6..9] = Timeout
  *
  *
  *
@@ -176,8 +177,21 @@ int init_start_PRU(int baudrate){
 }
 
 
-int send_data_PRU(uint8_t *data, uint32_t *tamanho){
+int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
+	uint32_t timeout_instructions = 0;
+
+	timeout_instructions = (int) timeout_ms*66600;
+
+
+	// Timeout setting
+	prudata[6] = timeout_instructions;					// LSByte do timeout_instructions [7..0]
+	prudata[7] = timeout_instructions >> 8;				// Byte do timeout_instructions [15..8]
+	prudata[8] = timeout_instructions >> 16;			// Byte do timeout_instructions [23..16]
+	prudata[9] = timeout_instructions >> 24;			// MSByte do timeout_instructions [31..24]
+
+
+	// Tamanho dos dados
 	prudata[OFFSET_SHRAM_WRITE] = *tamanho;				// LSByte do tamanho dos dados [7..0]
 	prudata[OFFSET_SHRAM_WRITE+1] = *tamanho >> 8;		// MSByte do tamanho dos dados [15..8]
 	prudata[OFFSET_SHRAM_WRITE+2] = *tamanho >> 16;		// MSByte do tamanho dos dados [23..16]
