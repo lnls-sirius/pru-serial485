@@ -261,7 +261,7 @@ LOAD_FROM_MEMORY:
 //	LBCO	I, SHRAM_BASE, OFFSET_SEND_COMMAND, 1			// Verify if command == 0x50. Already loaded from memory on previous instruction
 	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x50		
 	LBCO	I, SHRAM_BASE, 0x6c, 1							// Offset "ID" in an 0x50 instruction
-	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x01					// Reset ID = 0x00
+	QBNE	WAIT_FOR_RESPONSE, I.b0, 0x00					// Reset ID = 0x00
 	
 	JMP		TIMEOUT_AND_NORESPONSE							// Reset function. No response required.
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~				// Response required: continue on next block
@@ -565,12 +565,15 @@ STORE_LAST64_MEMORY:
 // ----- TIMEOUT e NO RESPONSE - Tratamento de dados ----------------------------------------------
 TIMEOUT_AND_NORESPONSE:
 
-		ZERO	&I, 4
+	READ_ISR
+	READ_LSR
+	
+	ZERO	&I, 4
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4			// Tamanho = 0x00
 	JMP		DATA_READY										// Finaliza execucao do comando
 // ------------------------------------------------------------------------------------------------
  
-
+ 
 
 // ----- DONE - Wait for new data send request ----------------------------------------------------
 DATA_READY:
