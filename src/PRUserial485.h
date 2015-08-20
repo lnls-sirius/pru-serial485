@@ -23,10 +23,12 @@ int init_start_PRU(int baudrate);
  * --Parametros--
  * data: valores a serem enviados
  * tamanho: quantidade de bytes a serem enviados (tamanho util do vetor data)
+ *  timeout_ms: tempo maximo de espera para receber uma resposta (em ms). Se 0, a resposta a receber será ignorada.
+ *
  *
  * --Retorno--
  * A funcao retorna SOMENTE após o recebimento de uma resposta do destino
- * (resposta válida ou timeout)
+ * (resposta válida, ignorada ou timeout)
 */
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
 
@@ -36,7 +38,6 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
  * --Parametros--
  * data: local para armazenamento de dados recebidos
  * tamanho: quantidade de bytes recebidos (tamanho util do vetor data)
- * timeout_ms: tempo maximo de espera para receber uma resposta (em ms)
  *
  *
  * Obs: Se tamanho == 0:
