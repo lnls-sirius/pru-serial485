@@ -143,7 +143,7 @@ OPERATION_MODE:
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
 // Wait for sync pulse: Apenas borda de subida
 	WBS SYNC
-	WBC	SYNC
+//	WBC	SYNC
 	
 //	Envia comando de sincronismo
 	ZERO 	&BLOCKS, 4
