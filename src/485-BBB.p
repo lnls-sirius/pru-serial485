@@ -174,6 +174,9 @@ DELAY_CONFIG:
 LOOP_DELAY:	
 	ADD		I,I,1											
 	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE					// Wait before verifying normal data
+
+	WBC SYNC
+
 // ------------------------------------------------------------------------------------------------	
 	
 	
