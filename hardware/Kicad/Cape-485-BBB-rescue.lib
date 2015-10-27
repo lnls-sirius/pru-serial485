@@ -1,0 +1,25 @@
+EESchema-LIBRARY Version 2.3
+#encoding utf-8
+#
+# Led_Small-RESCUE-Cape-485-BBB
+#
+DEF Led_Small-RESCUE-Cape-485-BBB D 0 10 N N 1 F N
+F0 "D" -50 100 50 H V L CNN
+F1 "Led_Small-RESCUE-Cape-485-BBB" -150 -80 50 H V L CNN
+F2 "" 0 0 60 V V C CNN
+F3 "" 0 0 60 V V C CNN
+$FPLIST
+ CP*
+ SM*
+$ENDFPLIST
+DRAW
+P 2 0 1 0  30 -40  30 40 N
+P 4 0 1 0  -30 -40  30 0  -30 40  -30 -40 F
+P 5 0 1 0  -20 50  0 70  -10 70  0 70  0 60 N
+P 5 0 1 0  0 30  20 50  10 50  20 50  20 40 N
+X A 1 -100 0 70 R 40 40 1 1 P
+X C 2 100 0 70 L 40 40 1 1 P
+ENDDRAW
+ENDDEF
+#
+#End Library
