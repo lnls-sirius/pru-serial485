@@ -132,3 +132,17 @@
 	SEND_SPI MODE_2,8		// Return from reset FIFO
 	CS_UP 
 .endm
+
+
+.macro RESET_UART
+	CS_DOWN
+	SEND_SPI 0x8a,8 		// MODE 2 Address
+	SEND_SPI 0x01,8			// Reset FIFO
+	CS_UP
+	NOP  
+	NOP
+	CS_DOWN
+	SEND_SPI 0x8a,8 		// MODE 2 Address
+	SEND_SPI MODE_2,8		// Return from reset FIFO
+	CS_UP 
+.endm

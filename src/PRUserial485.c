@@ -13,6 +13,10 @@
 #define OFFSET_SHRAM_READ		0x1800		//
 
 
+#define MENSAGEM_ANTIGA					0x55
+#define	MENSAGEM_RECEBIDA_NOVA			0x00
+#define	MENSAGEM_PARA_ENVIAR			0xff
+
 
 /* PRU SHARED MEMORY (12kB) - MAPPING
  *
@@ -27,7 +31,7 @@
  * prudata[5] = procedimento sincrono: START (0xFF) ou STOP (0x00)
  * prudata[6..9] = Timeout
  *
- *
+ * prudata[25] = Master/Slave ('M'/'S')
  *
  * SHRAM[50]~SHRAM[99] - Sync Operation
  * prudata[50] = data size
@@ -56,12 +60,14 @@ size_t i;
 
 
 void set_sync_start_PRU(){
-	prudata[5] = 0xff;
+	if(prudata[25]=='M')
+		prudata[5] = 0xff;
 }
 
 
 void set_sync_stop_PRU(){
-	prudata[5] = 0x00;
+	if(prudata[25]=='M')
+		prudata[5] = 0x00;
 }
 
 
@@ -69,11 +75,11 @@ void set_sync_stop_PRU(){
 void close_PRU(){
 	// Disable PRU and close memory mapping //
 	prussdrv_pru_disable(PRU_NUM);
-	prussdrv_exit ();
+	prussdrv_exit();
 }
 
 
-int init_start_PRU(int baudrate){
+int init_start_PRU(int baudrate, char mode){
 
 	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
 
@@ -81,7 +87,7 @@ int init_start_PRU(int baudrate){
 	prussdrv_init();
 
 	// Open PRU Interrupt and get it initialized //
-	if (prussdrv_open(PRU_EVTOUT_1)) {
+	if (prussdrv_open(PRU_EVTOUT_1)){
 		printf("prussdrv_open open failed\n");
 		return -1;
 	}
@@ -95,9 +101,25 @@ int init_start_PRU(int baudrate){
 	for(i=0; i<100; i++)
 		prudata[i] = 0x00;
 
-	// Initialization: sync proc disabled //
-	set_sync_stop_PRU();
 
+	// Operation Mode - Master/Slave
+	if(mode=='M' || mode=='S')
+		prudata[25] = mode;
+
+	else{
+		close_PRU();		// If requested mode is not defined
+		printf("Requested mode does not exist.\n");
+		return -1;
+	}
+
+
+	// Initialization: sync proc disabled - SOMENTE NO MODO MASTER
+	if(prudata[25]=='M')
+		set_sync_stop_PRU();
+
+	// Initialization: nenhuma mensagem nova na serial
+	if(prudata[25]=='S')
+		prudata[1]=MENSAGEM_ANTIGA;
 
 
 	// Baudrate config
@@ -158,6 +180,7 @@ int init_start_PRU(int baudrate){
 
 		default:
 			close_PRU();		// If requested baudrate is not defined
+			printf("Baudrate not defined.\n");
 			return -1;
 	}
 
@@ -184,12 +207,13 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 	timeout_instructions = (int) timeout_ms*66600;
 
 
-	// Timeout setting
-	prudata[6] = timeout_instructions;					// LSByte do timeout_instructions [7..0]
-	prudata[7] = timeout_instructions >> 8;				// Byte do timeout_instructions [15..8]
-	prudata[8] = timeout_instructions >> 16;			// Byte do timeout_instructions [23..16]
-	prudata[9] = timeout_instructions >> 24;			// MSByte do timeout_instructions [31..24]
-
+	// Timeout setting - SOMENTE NO MODO MASTER
+	if(prudata[25]=='M'){
+		prudata[6] = timeout_instructions;				// LSByte do timeout_instructions [7..0]
+		prudata[7] = timeout_instructions >> 8;			// Byte do timeout_instructions [15..8]
+		prudata[8] = timeout_instructions >> 16;		// Byte do timeout_instructions [23..16]
+		prudata[9] = timeout_instructions >> 24;		// MSByte do timeout_instructions [31..24]
+	}
 
 	// Tamanho dos dados
 	prudata[OFFSET_SHRAM_WRITE] = *tamanho;				// LSByte do tamanho dos dados [7..0]
@@ -197,38 +221,71 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 	prudata[OFFSET_SHRAM_WRITE+2] = *tamanho >> 16;		// MSByte do tamanho dos dados [23..16]
 	prudata[OFFSET_SHRAM_WRITE+3] = *tamanho >> 24;		// MSByte do tamanho dos dados [31..24]
 
+
 	// Insere na memoria - Dados a enviar
 	for(i=0; i<*tamanho; i++)
 		prudata[OFFSET_SHRAM_WRITE+4+i] = data[i];
 
-
 	// Data is ready to be sent
-	prudata[1] = 0xff;
+	prudata[1] = MENSAGEM_PARA_ENVIAR;
 
-	// Wait until PRU1 has finished execution //
-	prussdrv_pru_wait_event (PRU_EVTOUT_1);
 
-	while(prudata[1] != 0x00){
-	}
+	// Wait until PRU1 has finished execution
+	prussdrv_pru_wait_event(PRU_EVTOUT_1);
 
 	// Clear event
-	prussdrv_pru_clear_event (PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+	prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+
+	// Aguarda fim de envio
+	if(prudata[25]=='S')
+		while(prudata[1] != 0x55);
 
 	return 0;
 }
 
 
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
+	// ---------- MASTER MODE ----------
+	if(prudata[25]=='M'){
+		// Aguarda dados prontos na Shared Memory - SOMENTE NO MODO MASTER
+		while(prudata[1] != 0x00){
+		}
 
-	*tamanho = 0;
+		*tamanho = 0;
 
-	// Data length
-	for(i=0; i<4; i++)
-		*tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+		// Data length
+		for(i=0; i<4; i++)
+			*tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
 
-	// Data
-	for(i=0; i<*tamanho; i++)
-		data[i] = prudata[OFFSET_SHRAM_READ+4+i];
+		// Data
+		for(i=0; i<*tamanho; i++)
+			data[i] = prudata[OFFSET_SHRAM_READ+4+i];
 
-	return 0;
+		return 0;
+	}
+
+
+	// ---------- SLAVE MODE ----------
+	if(prudata[25]=='S'){
+		if(prudata[1] == MENSAGEM_RECEBIDA_NOVA){ // Nova mensagem recebida !
+			*tamanho = 0;
+
+			// Data length
+			for(i=0; i<4; i++)
+				*tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+
+			// Data
+			for(i=0; i<*tamanho; i++)
+				data[i] = prudata[OFFSET_SHRAM_READ+4+i];
+
+			prudata[1] = MENSAGEM_ANTIGA;
+
+			while(prudata[1] != MENSAGEM_ANTIGA);
+
+			return 0;
+		}
+
+		if(prudata[1] == MENSAGEM_ANTIGA)	// Mensagem antiga no buffer. Retorna -1.
+			return -1;
+	}
 }

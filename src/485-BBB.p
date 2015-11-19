@@ -15,6 +15,7 @@
 #define CHIP_SELECT					r30.t2		// P8.43
 #define IRQ							r31.t6		// P8.39
 #define SYNC						r31.t8		// P8.27
+#define SAIDA						r30.t5		// P8.42
 
 
 #define A							r16
@@ -29,6 +30,7 @@
 #define FIFO_LENGHT					r26
 #define	TIMEOUT_VALUE				r27
 #define	J							r28
+#define OPERATION_MODE				r15
 
  
 #define UART_MODES_ADDRESS			0x89	// UART_WRITE_END
@@ -54,6 +56,10 @@
 #define LSREN						0x03	// LSRIntEn -- RTimeoutEn
 
 
+#define MENSAGEM_ANTIGA					0x55
+#define	MENSAGEM_RECEBIDA_NOVA			0x00
+#define	MENSAGEM_PARA_ENVIAR			0xff
+
 
 
 .setcallreg r29.w0					// PC saving register (CALL instructions)				
@@ -67,6 +73,8 @@
 START:	 
 // ----- Initial Configuration --------------------------------------------------------------------
 
+	CLR SAIDA
+
 // OFFSET_SHRAM_WRITE
 	ZERO	&OFFSET_SHRAM_WRITE, 4    
 	MOV		OFFSET_SHRAM_WRITE, 0x18
@@ -75,10 +83,15 @@ START:
 //  Shared Memory Config
 	SHRAM_CONFIG
 
+	RESET_UART
+			
 // Wait for UART to start
 	WBS		IRQ  
 		
 	READ_ISR	
+	READ_LSR	
+	
+
 	
 // ~~~~~ MAX3107 Configuration Registers ~~~~~
 
@@ -103,10 +116,11 @@ START:
 	SEND_SPI CLKSOURCE, 8
 	CS_UP
 	
-//	CS_DOWN
-//	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8	
-//	SEND_SPI IRQEN, 8
-//	CS_UP
+
+	CS_DOWN
+	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8	
+	SEND_SPI 0x00, 8
+	CS_UP
 
 	CS_DOWN
 	SEND_SPI INTERRUPTS_LSREN_ADDRESS, 8	
@@ -117,50 +131,61 @@ START:
 	CS_DOWN
 	SEND_SPI 0x1f, 8
 	RECEIVE_SPI 8
-	SBCO BUFFER_SPI_IN, SHRAM_BASE, OFFSET_SHRAM_WRITE, 1
+	SBCO BUFFER_SPI_IN, SHRAM_BASE, 0, 1
 	CS_UP
 
 // ------------------------------------------------------------------------------------------------
 
 
 
-PROCEDURE_START:
+// ~~~~~ MASTER/SLAVE MODE ~~~~~~~~~~~~~~~~~
+	ZERO	&OPERATION_MODE, 4					// Verifica se opera em modo Master ou Slave
+	LBCO	OPERATION_MODE, SHRAM_BASE, 25, 1	// OPERATION_MODE <- shram[25] ('M' ou 'S') 
+
+	SET SAIDA
+	
+	QBEQ	PROCEDURE_START_MASTER, OPERATION_MODE, 0x4d 	// 0x4D = 'M'
+	QBEQ	PROCEDURE_START_SLAVE, OPERATION_MODE, 0x53 	// 0x53 = 'S'
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+ 
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// :::::::::::::::::::::::::: MASTER MODE :::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+PROCEDURE_START_MASTER:
 
 	READ_ISR
 	READ_LSR	
 
-// ~~~~~ Verifica modo de operacao ~~~~~~~~~
-OPERATION_MODE:
+// ~~~~~ Verifica modo de operacao Master ~~
+OPERATION_MODE_MASTER:
 	ZERO	&I, 4
 	LBCO	I, SHRAM_BASE, 5, 1								// 0xFF : Modo Sincrono
 	QBNE	WAIT_FOR_DATA, I, 0xff 							// 0x00 : Modo Normal
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	
 	
-
-	
 	
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
 // Wait for sync pulse: Apenas borda de subida
 	WBS SYNC
-//	WBC	SYNC
 	
 //	Envia comando de sincronismo
 	ZERO 	&BLOCKS, 4
 	LBCO	BLOCKS, SHRAM_BASE, OFFSET_SHRAM_SYNC, 1		// Tamanho do bloco
 	
-	MOV		I,OFFSET_SHRAM_SYNC
-//	ADD		I,I,1											// I pointer to the start of valid data SHRAM[50+1]
+	MOV		I,OFFSET_SHRAM_SYNC								// I pointer to the start of valid data SHRAM[50+1]
 	ADD 	BLOCKS,BLOCKS,I									// Blocks: address of the last byte
 	
 	CS_DOWN
 	SEND_SPI 0x80,8											// Comando Envio
 
 LOAD_FROM_MEMORY_SYNC:	
-	ADD		I,I,1
-	LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1				// Carrega bloco I da shram
-	SEND_SPI BUFFER_SPI_OUT,8								// Envia bloco
-									
+		ADD		I,I,1
+		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1				// Carrega bloco I da shram
+		SEND_SPI BUFFER_SPI_OUT,8								// Envia bloco								
 	QBNE	LOAD_FROM_MEMORY_SYNC,I,BLOCKS					// Se I == NUMERO DE BLOCOS, termina loop
 	 
 	CS_UP
@@ -172,7 +197,7 @@ DELAY_CONFIG:
 	LSL		TIMEOUT_VALUE, TIMEOUT_VALUE, 4						
 
 LOOP_DELAY:	
-	ADD		I,I,1											
+		ADD		I,I,1											
 	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE					// Wait before verifying normal data
 
 	WBC SYNC
@@ -181,144 +206,34 @@ LOOP_DELAY:
 	
 	
 	
-	
-	
 // ----- PROCEDIMENTO CONSTANTE -------------------------------------------------------------------
 // Verifica se os dados já estão prontos para serem enviados: SHRAM[1] = 0xFF
 WAIT_FOR_DATA:
 
 	LBCO	I, SHRAM_BASE, 1, 1
-	QBNE	OPERATION_MODE, I.b0, 0xff						// Se not ready, verifica condicao de sincronismo
+	QBNE	OPERATION_MODE_MASTER, I.b0, 0xff						// Se not ready, verifica condicao de sincronismo
 	
-
-// Reset FIFO UART
 	RESET_FIFO_UART
 	
-	
-	
-	JMP SEND_DATA
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-	
-
 // ------------------------------------------------------------------------------------------------
  
  
- 
- 
- 
- 
- 
- 
- 
  // ----- ENVIAR DADOS ----------------------------------------------------------------------------
- SEND_DATA:
- 
- // ~~~~~ Configs ~~~~~~~~~~~~~~~~~~~~~~~~~~
-	ZERO 	&BLOCKS, 4
-	LBCO	BLOCKS, SHRAM_BASE, OFFSET_SHRAM_READ, 4		// Tamanho do bloco
-	
-	MOV		I,OFFSET_SHRAM_READ
-	ADD		I,I,4											// I pointer to the start of valid data SHRAM[100+4]
-		
-	ZERO	&A, 4
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-		
-		
-// ~~~~~ Total de bytes = A*100 + B ~~~~~~~~
-	MVID	B, BLOCKS
-	QBGT	LAST_BYTES, BLOCKS, 0x64						// Jump se tamanho < 100
-
-QTDD_BLOCOS:
-		SUB		B, B, 0x64									// bytes finais -= 100
-		ADD		A, A, 1
-	QBLE	QTDD_BLOCOS, B, 0x63							// Repete loop se bytes finais > 100	
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
-
-
-
-
-// ~~~~~ Enviar A blocos de 100 bytes ~~~~~~			
-LOOP_COUNT:
-	ZERO &J, 4
-
-	CS_DOWN
-	SEND_SPI 0x80,8
-	LOOP_COUNT_DATA:
-		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1			// Carrega bloco I da shram
-		SEND_SPI BUFFER_SPI_OUT,8							// Envia bloco
-		ADD I, I, 1
-		ADD J, J, 1
-		QBNE LOOP_COUNT_DATA, J, 0x64						// Encerra com J == 100
-		
-	CS_UP
+	CALL SEND_DATA_UART
 	 
-	WAIT_BUFFER_TX:
-		// Le Tx FIFO Level
-		CS_DOWN
-		SEND_SPI 0x11, 8
-		RECEIVE_SPI  8
-		CS_UP
-
-		LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 3
-		QBNE	WAIT_BUFFER_TX, BUFFER_SPI_IN, 0			// Aguarda Buffer TX < 8
-
-	SUB A, A, 1
-	QBNE LOOP_COUNT, A, 0									// Finaliza envio de A blocos
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-	
-	
-
-// ~~~~~ Enviar B bytes ~~~~~~~~~~~~~~~~~~~~
-LAST_BYTES:
-	QBEQ	FINALIZANDO, B, 0
-	
-	CS_DOWN
-	SEND_SPI 0x80,8
-	LOOP_COUNT_DATA_FINAL:
-		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1			// Carrega bloco I da shram
-		SEND_SPI BUFFER_SPI_OUT,8							// Envia bloco
-		ADD I, I, 1
-		SUB B, B, 1
-		QBNE LOOP_COUNT_DATA_FINAL, B, 0					// Encerra
-	CS_UP	
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
-
-
-FINALIZANDO:
-	READ_ISR
-	READ_LSR		
-	READ_STS
- 
- 
- 
  // Aguardar resposta 
- //	JMP	RECEIVE_DATA
  // -----------------------------------------------------------------------------------------------
  
- 
- 
- 
- 
- 
- 
- 
+  
  // ----- RECEBER DADOS ---------------------------------------------------------------------------
  RECEIVE_DATA:
  
- // ~~~~~ Response required? ~~~~~~~~~~~~~~~~
-	LBCO	I, SHRAM_BASE, OFFSET_SEND_COMMAND, 1			// Verify if command == 0x50. Already loaded from memory on previous instruction
-	QBNE	RECEIVE_DATA_OK, I.b0, 0x50		
-	LBCO	I, SHRAM_BASE, 0x6c, 1							// Offset "ID" in an 0x50 instruction
-	QBNE	RECEIVE_DATA_OK, I.b0, 0x00						// Reset ID = 0x00
-	
-	JMP		TIMEOUT_AND_NORESPONSE							// Reset function. No response required.
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~				// Response required: continue on next block
+// ~~~~~ Response required? ~~~~~~~~~~~~~~~~
+        LBCO    TIMEOUT_VALUE, SHRAM_BASE, 6, 4                 // Se Timeout == 0, nao aguardar resposta.
+        QBNE    RECEIVE_DATA_OK, TIMEOUT_VALUE, 0x00
 
+        JMP     TIMEOUT_AND_NORESPONSE                                           
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
  
  RECEIVE_DATA_OK:
  
@@ -335,12 +250,10 @@ FINALIZANDO:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-
 // ~~~~~ Timeout Config~~~~~~~~~~~~~~~~~~~~~
 	LBCO	TIMEOUT_VALUE, SHRAM_BASE, 6, 4
 	ZERO	&I, 4
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 
 
 // ~~~~~ Response or timeout ? ~~~~~~~~~~~~~
@@ -351,10 +264,6 @@ WAIT_RECEIVED:
 
 	QBBS	WAIT_RECEIVED, IRQ								// Data not received, loop continues
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	
-
-
-
 	
 
 // Habilita Interrupcao RxTimeout 
@@ -435,7 +344,6 @@ STORE_LAST64_MEMORY:
 	CS_UP	
  
  
- 
  // ~~~~~ TAMANHO DOS DADOS ~~~~~~~~~~~~~~~~
 	ZERO	&J,4
 	ADD		J,OFFSET_SHRAM_WRITE,3							// J = 0x1803
@@ -444,19 +352,12 @@ STORE_LAST64_MEMORY:
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 			// Armazena tamanho nos primeiros bytes
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
 	READ_ISR
 	READ_LSR
 	
  // Procedimento concluido
  	JMP	DATA_READY
  // ------------------------------------------------------------------------------------------------
- 
- 
- 
- 
- 
- 
  
  
  
@@ -470,8 +371,6 @@ TIMEOUT_AND_NORESPONSE:
 	JMP		DATA_READY										// Finaliza execucao do comando
 // ------------------------------------------------------------------------------------------------
   
-    
-
 
 // ----- DONE - Wait for new data send request ----------------------------------------------------
 DATA_READY:
@@ -487,8 +386,198 @@ DATA_READY:
 
 	MOV 	r31.b0, PRU1_ARM_INTERRUPT+16
 	
-	JMP		PROCEDURE_START
+	JMP		PROCEDURE_START_MASTER
 // ------------------------------------------------------------------------------------------------	
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
+
+
+
+
+
+
+
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// :::::::::::::::::::::::::: SLAVE MODE ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+PROCEDURE_START_SLAVE:
+	
+	READ_ISR
+	READ_LSR
+	
+ 
+ // ----- RECEBER DADOS ---------------------------------------------------------------------------
+ RECEIVE_DATA_SLAVE:
+ 
+// Reset FIFO UART
+	RESET_FIFO_UART
+  
+ // ~~~~~ Int por RxFIFO nao-vazio ~~~~~~~~~
+	CS_DOWN
+	SEND_SPI 0x8a, 8										// Mode2 Address
+	SEND_SPI 0x88, 8										// Mode2 = RxEmtyInv & EchoSuprs
+	CS_UP
+
+
+	CS_DOWN
+	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
+	SEND_SPI 0x40, 8										// RxEmtyEn
+	CS_UP
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+	READ_ISR
+
+// ~~~~~ Data received ? ~~~~~~~~~~~~~~~~~~~
+WAIT_RECEIVED_SLAVE:
+
+// ----- Verifica se há algo para enviar -----
+// Prontos para serem enviados: SHRAM[1] = 0xFF
+	LBCO	I, SHRAM_BASE, 1, 1					// 0xFF : Dados a enviar
+	QBEQ	SEND_DATA_SLAVE, I.b0, 0xff			// 0x55 : Nada a enviar
+// -------------------------------------------
+
+	QBBS	WAIT_RECEIVED_SLAVE, IRQ							// Data not received, loop continues
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+
+// Habilita Interrupcao RxTimeout 
+	CS_DOWN
+	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
+	SEND_SPI 0x01, 8										// Apenas LSRErrEn
+	CS_UP
+	
+// Desabilita RxEmptyInv
+	CS_DOWN
+	SEND_SPI 0x8a, 8
+	SEND_SPI 0x80, 8										// Apenas EchoSuprs
+	CS_UP
+	
+	READ_ISR
+	READ_LSR
+		
+// Configura pointer para SHRAM_WRITE
+	ZERO	&I, 4
+	ADD		I,OFFSET_SHRAM_WRITE, 3							// I pointer to the start of valid data SHRAM[0x1800 + 3]
+
+
+
+// Le RxLevel até ser >= 64 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
+RXLEVEL_AND_TIMEOUT_SLAVE:
+
+	QBBC 	STORE_LEFTBYTES_SLAVE, IRQ							// RxTimeout Interrupt. End of message reached
+	
+	// Le Rx FIFO Level
+	CS_DOWN
+	SEND_SPI 0x12, 8 
+	RECEIVE_SPI  8
+	CS_UP
+
+	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 6
+	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0			// Aguarda Buffer TX >= 0x0100 0000 = 64
+
+ 
+ // Armazena 64 bytes na SHRAM
+STORE_64BYTES_SLAVE:
+	ZERO	&J,4											// J: contador do loop
+	CS_DOWN
+	SEND_SPI 0x00,8											// Comando Read
+
+STORE_64_MEMORY_SLAVE:	
+	ADD		I,I,1											// Starting at SHRAM[0x1800 + 4]
+	RECEIVE_SPI 8											// Recebe byte bloco
+	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1					// Armazena no byte I da shram
+	ADD		J,J,1											
+									
+	QBNE	STORE_64_MEMORY_SLAVE,J,0x40							// Se J == 64, termina loop
+	CS_UP
+	
+	JMP 	RXLEVEL_AND_TIMEOUT_SLAVE
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+ // Armazena bytes restantes - Interrupcao RxTimeout
+STORE_LEFTBYTES_SLAVE:
+ // Le Rx FIFO Level
+	CS_DOWN
+	SEND_SPI 0x12, 8
+	RECEIVE_SPI  8
+	CS_UP
+	
+	ZERO	&J,4
+	MOV		J,BUFFER_SPI_IN									// J = N.of words in RxFIFO
+	
+	CS_DOWN
+	SEND_SPI 0x00,8											// Comando Read
+
+STORE_LAST64_MEMORY_SLAVE:	
+	ADD		I,I,1											// Starting at SHRAM[0x1800 + 4]
+	RECEIVE_SPI 8											// Recebe byte bloco
+	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1					// Armazena no byte I da shram
+	SUB		J,J,1											
+									
+	QBNE	STORE_LAST64_MEMORY_SLAVE,J,0x00						// Se J == 0, termina loop
+	CS_UP	
+ 
+ 
+ // ~~~~~ TAMANHO DOS DADOS ~~~~~~~~~~~~~~~~
+	ZERO	&J,4
+	ADD		J,OFFSET_SHRAM_WRITE,3							// J = 0x1803
+	SUB		I, I, J											// I = I - J = tamanho
+	
+	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 			// Armazena tamanho nos primeiros bytes
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	READ_ISR
+	READ_LSR
+	
+	CS_DOWN
+	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
+	SEND_SPI 0x00, 8										// Desabilita interrupcoes
+	CS_UP
+	
+	
+// Procedimento concluido
+ 	JMP	DATA_READY_SLAVE
+// ------------------------------------------------------------------------------------------------
+
+  
+// ----- ENVIO DE DADOS - MODO SLAVE --------------------------------------------------------------
+ SEND_DATA_SLAVE:
+ 
+ 	CALL SEND_DATA_UART
+	
+ 	MOV		I, MENSAGEM_ANTIGA
+ 	SBCO	I, SHRAM_BASE, 1, 1	 	// Dados já enviados e nao ha dado recebido no buffer
+ 	
+ // Sinaliza fim de envio
+ 	MOV 	r31.b0, PRU1_ARM_INTERRUPT+16
+	
+	JMP		PROCEDURE_START_SLAVE
+ // ------------------------------------------------------------------------------------------------
+  
+   
+
+
+// ----- DONE - Wait for new data send request ----------------------------------------------------
+DATA_READY_SLAVE:
+	SBCO	0x00, SHRAM_BASE, 1, 1	
+
+	CS_DOWN
+	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
+	SEND_SPI 0x00, 8										// Desabilita interrupcoes
+	CS_UP
+
+	JMP		PROCEDURE_START_SLAVE
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+
 
 
 	
@@ -501,8 +590,111 @@ END:
 	
 	
 	
+// -----------------------------------------------------------------------
+// --------------------- Transmissao UART - MAX3107 ----------------------
+// -----------------------------------------------------------------------
+SEND_DATA_UART:
+
+// ~~~~~ Armazena valor do endereco de retorno
+	MOV		K, r29
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	// ~~~~~ Configs ~~~~~~~~~~~~~~~~~~~~~~~~~~
+	ZERO 	&BLOCKS, 4
+	LBCO	BLOCKS, SHRAM_BASE, OFFSET_SHRAM_READ, 4		// Tamanho do bloco
+	
+	MOV		I,OFFSET_SHRAM_READ
+	ADD		I,I,4											// I pointer to the start of valid data SHRAM[100+4]
+		
+	ZERO	&A, 4
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+				
+// ~~~~~ Total de bytes = A*100 + B ~~~~~~~~
+	MVID	B, BLOCKS
+	QBGT	LAST_BYTES, BLOCKS, 0x64						// Jump se tamanho < 100
+
+QTDD_BLOCOS:
+		SUB		B, B, 0x64									// bytes finais -= 100
+		ADD		A, A, 1
+	QBLE	QTDD_BLOCOS, B, 0x63							// Repete loop se bytes finais > 100	
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+
+
+// ~~~~~ Enviar A blocos de 100 bytes ~~~~~~			
+LOOP_COUNT:
+	ZERO &J, 4
+
+	CS_DOWN
+	SEND_SPI 0x80,8
+	LOOP_COUNT_DATA:
+		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1			// Carrega bloco I da shram
+		SEND_SPI BUFFER_SPI_OUT,8							// Envia bloco
+		ADD I, I, 1
+		ADD J, J, 1
+		QBNE LOOP_COUNT_DATA, J, 0x64						// Encerra com J == 100
+		
+	CS_UP
+	 
+	WAIT_BUFFER_TX:
+		// Le Tx FIFO Level
+		CS_DOWN
+		SEND_SPI 0x11, 8
+		RECEIVE_SPI  8
+		CS_UP
+
+		LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 3
+		QBNE	WAIT_BUFFER_TX, BUFFER_SPI_IN, 0			// Aguarda Buffer TX < 8
+
+	SUB A, A, 1
+	QBNE LOOP_COUNT, A, 0									// Finaliza envio de A blocos
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	
+// ~~~~~ Enviar B bytes ~~~~~~~~~~~~~~~~~~~~
+LAST_BYTES:
+
+
+	QBEQ	FINALIZANDO, B, 0
+	
+	CS_DOWN
+	SEND_SPI 0x80,8
+	LOOP_COUNT_DATA_FINAL:
+		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1			// Carrega bloco I da shram
+		SEND_SPI BUFFER_SPI_OUT,8							// Envia bloco
+		ADD I, I, 1
+		SUB B, B, 1
+		QBNE LOOP_COUNT_DATA_FINAL, B, 0					// Encerra
+	CS_UP
+	
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+
+
+
+FINALIZANDO:
+	READ_ISR
+	READ_LSR		
+	READ_STS
+	
+WAIT_TX_EMPTY:	
+	// Le Tx FIFO Level
+	CS_DOWN
+	SEND_SPI 0x11, 8 
+	RECEIVE_SPI  8
+	CS_UP
+
+	QBNE	WAIT_TX_EMPTY, BUFFER_SPI_IN, 0			// Aguarda Buffer TX estar vazio
 	
 	
+// ~~~~~ Devolve valor do endereco de retorno
+	MOV		r29, K
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	 	
+	RET	 	
+// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 	
 	
 	
