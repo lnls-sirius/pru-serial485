@@ -10,9 +10,9 @@
 #define OFFSET_SHRAM_WRITE		0x64		// 100 general purpose bytes
 #define OFFSET_SHRAM_READ		0x1800		//
 
-#define MENSAGEM_ANTIGA			0x55
-#define	MENSAGEM_RECEBIDA_NOVA		0x00
-#define	MENSAGEM_PARA_ENVIAR		0xff
+#define MENSAGEM_ANTIGA					0x55
+#define	MENSAGEM_RECEBIDA_NOVA			0x00
+#define	MENSAGEM_PARA_ENVIAR			0xff
 
 
 /* PRU SHARED MEMORY (12kB) - MAPPING
