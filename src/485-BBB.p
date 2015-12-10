@@ -419,6 +419,8 @@ PROCEDURE_START_SLAVE:
  
 // Reset FIFO UART
 	RESET_FIFO_UART
+	
+	READ_ISR	
   
  // ~~~~~ Int por RxFIFO nao-vazio ~~~~~~~~~
 	CS_DOWN
@@ -433,7 +435,7 @@ PROCEDURE_START_SLAVE:
 	CS_UP
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	
-	READ_ISR
+
 
 // ~~~~~ Verifica recepcao de dados ~~~~~~~~
 WAIT_RECEIVED_SLAVE:
