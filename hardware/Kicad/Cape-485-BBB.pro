@@ -1,6 +1,6 @@
-update=Qua 30 Set 2015 11:04:13 BRT
+update=Seg 30 Mai 2016 09:16:50 BRT
 version=1
-last_client=eeschema
+last_client=kicad
 [pcbnew]
 version=1
 LastNetListRead=
@@ -62,7 +62,8 @@ LibName30=contrib
 LibName31=valves
 LibName32=/run/user/1002/gvfs/smb-share:server=centaurus,share=repositorio/Grupos/CONT/Projetos/Cape 485 - BBB/Kicad/Bibliotecas /CON
 LibName33=/run/user/1002/gvfs/smb-share:server=centaurus,share=repositorio/Grupos/CONT/Projetos/Cape 485 - BBB/Kicad/Cape-485-BBB
-LibName34=/run/user/1002/gvfs/smb-share:server=centaurus,share=repositorio/Grupos/CONT/Library/Controle/Controle
+LibName34=/home/nallin/Documents/Kicad - Mini Projetos/Biblioteca Arduino/Library_schematic_shield_arduino/shield_arduino
+LibName35=/run/user/1000/gvfs/smb-share:server=centaurus,share=repositorio/Grupos/CONT/Library/Controle/Controle
 [schematic_editor]
 version=1
 PageLayoutDescrFile=
