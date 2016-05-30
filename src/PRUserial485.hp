@@ -1,0 +1,148 @@
+#define PRU0_R31_VEC_VALID      (1<<5)
+#define SIGNUM                  3
+
+#define PRU0_PRU1_INTERRUPT     17
+#define PRU1_PRU0_INTERRUPT     18
+#define PRU0_ARM_INTERRUPT      19
+#define PRU1_ARM_INTERRUPT      20
+#define ARM_PRU0_INTERRUPT      21
+#define ARM_PRU1_INTERRUPT      22
+
+#define UART_BASE               C7
+#define RAM0_BASE               C24
+#define RAM1_BASE               C25
+#define SHRAM_BASE              C28
+#define CONST_PRUCFG         	C4
+ 
+#define PRU0_CTRL            	0x22000
+#define PRU1_CTRL            	0x24000
+ 
+#define CTPPR0               	0x28
+
+#define RBR                     0x00    // Receive Buffer Register  (read-only)
+#define THR                     0x00    // Transmit Holding reg (write-only)
+#define IER                     0x04    // Interrupt Enable Register
+#define IIR                     0x04    // Interrupt Identification Register
+#define FCR                     0x08    // FIFO Control Register (write-only)
+#define FCR_FIFOEN_BIT      	0x00    // enable and disable fifo
+#define FCR_RXCLR_BIT  		0x01    // receiver fifo clear
+#define FCR_TXCLR_BIT       	0x02    // transmitter fifo clear
+#define FCR_DMAMODE1_BIT    	0x03    // dma mode 1 enable
+
+
+#define ULSR                    0x14    // UART Line Status Register
+#define LSR_RXFIFOE_BIT	 	0x07
+#define LSR_TEMT_BIT        	0x06    // Transmitter Empty
+#define LSR_DR_BIT     		0x00    // RX Holding reg empty
+#define LSR_THRE_BIT   	 	0x05    // TX Holding reg empty
+#define LSR_OE_BIT          	0x01
+#define DLL                     0x20    // Divisor LSB Latch
+#define DLH                     0x24    // Divisor MSB Latch
+#define PWR                     0x30    // Power Management Register
+#define PWR_UTRST_BIT       	0x14   	//
+#define MDR                     0x34    // Mode Definition Register
+#define MSR                     0x18
+#define MSR_DCTS_BIT        	0x00
+#define RAM1_SIZE_LOW		0
+#define RAM1_SIZE_HIGH		32
+
+
+
+.macro SHRAM_CONFIG
+	LBCO    r0, CONST_PRUCFG, 4, 4          // Enable OCP master port
+	CLR     r0, r0, 4
+	SBCO    r0, CONST_PRUCFG, 4, 4
+	MOV     r0, SHARED_RAM                  // Set C28 to point to shared RAM
+	MOV     r1, PRU1_CTRL + CTPPR0
+	SBBO    r0, r1, 0, 4
+.endm
+
+
+.macro SEND_SPI
+.mparam data, size
+	MOV BUFFER_SPI_OUT,data
+	MOV	TAMANHO, size
+	CALL SPI_SEND
+.endm
+
+
+.macro RECEIVE_SPI
+.mparam size
+	MOV	TAMANHO, size	
+	CALL SPI_RECEIVE
+.endm
+
+
+
+.macro NOP				// No Operation
+	MOV	r15,r15
+.endm
+
+
+.macro CS_UP
+	NOP
+	NOP
+	SET	CHIP_SELECT
+	NOP
+	NOP
+.endm
+
+
+.macro CS_DOWN
+	NOP
+	NOP
+	CLR	CHIP_SELECT
+	NOP
+	NOP
+.endm
+
+
+.macro READ_ISR
+	CS_DOWN 
+	SEND_SPI ISR_REGISTER_ADDRESS,8
+	RECEIVE_SPI 8
+	CS_UP
+.endm
+
+
+.macro READ_LSR
+	CS_DOWN 
+	SEND_SPI 0x04,8
+	RECEIVE_SPI 8
+	CS_UP	
+.endm
+
+.macro READ_STS
+	CS_DOWN 
+	SEND_SPI 0x08,8
+	RECEIVE_SPI 8
+	CS_UP
+.endm
+
+
+.macro RESET_FIFO_UART
+	CS_DOWN
+	SEND_SPI 0x8a,8 		// MODE 2 Address
+	SEND_SPI 0x02,8			// Reset FIFO
+	CS_UP
+	NOP  
+	NOP
+	CS_DOWN
+	SEND_SPI 0x8a,8 		// MODE 2 Address
+	SEND_SPI MODE_2,8		// Return from reset FIFO
+	CS_UP 
+.endm
+
+
+.macro RESET_UART
+	CS_DOWN
+	SEND_SPI 0x8a,8 		// MODE 2 Address
+	SEND_SPI 0x01,8			// Reset FIFO
+	CS_UP
+	NOP  
+	NOP
+	CS_DOWN
+	SEND_SPI 0x8a,8 		// MODE 2 Address
+	SEND_SPI MODE_2,8		// Return from reset FIFO
+	CS_UP 
+.endm

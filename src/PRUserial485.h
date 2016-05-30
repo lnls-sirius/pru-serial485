@@ -98,6 +98,14 @@ void set_sync_stop_PRU();
 
 
 
+/* ENDERECO DA PLACA
+ * Retorna o endereco fisico da placa, selecionado em hardware.
+ * Util apenas no modo SLAVE
+*/
+uint8_t hardware_address_serialPRU();
+
+
+
 
 /* DESABILITA PRU
  * Encerra atividade da PRU e fecha o mapeamento da memoria compartilhada

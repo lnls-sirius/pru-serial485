@@ -6,6 +6,11 @@
 #include <prussdrv.h>
 #include <pruss_intc_mapping.h>
 
+#include <fcntl.h>
+#include <sys/mman.h>
+
+
+
 #define PRU_NUM         		1
 #define OFFSET_SHRAM_WRITE		0x64		// 100 general purpose bytes
 #define OFFSET_SHRAM_READ		0x1800		//
@@ -13,6 +18,18 @@
 #define MENSAGEM_ANTIGA			0x55
 #define	MENSAGEM_RECEBIDA_NOVA		0x00
 #define	MENSAGEM_PARA_ENVIAR		0xff
+
+
+#define GPIO_DATAOUT 0x13C
+#define GPIO_DATAIN 0x138
+#define GPIO0_ADDR 0x44E07000
+#define GPIO1_ADDR 0x4804C000
+#define GPIO2_ADDR 0x481AC000
+#define GPIO3_ADDR 0x481AF000
+#define	CM_PER_ADDR 0x44E00000
+#define	CM_GPIO1	0xAC
+#define	CM_GPIO2	0xB0
+#define	CM_GPIO3	0xB4
 
 
 /* PRU SHARED MEMORY (12kB) - MAPPING
@@ -53,6 +70,43 @@
 
 volatile uint8_t* prudata;
 size_t i;
+
+
+
+uint8_t hardware_address_serialPRU(){
+	uint8_t endereco = 0x00;
+
+	int fd = open("/dev/mem",O_RDWR | O_SYNC);
+
+	// Habilita GPIO2
+	ulong* clk_mngr = (ulong*) mmap(NULL, 0x4000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_PER_ADDR);
+	clk_mngr[CM_GPIO2/4] = (clk_mngr[CM_GPIO2/4] & 0xFC) | 0x02;
+
+
+	ulong* pinconf0 =  (ulong*) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO0_ADDR);
+	ulong* pinconf2 =  (ulong*) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO2_ADDR);
+
+	if(pinconf0[GPIO_DATAIN/4] & (1 << 10))
+		endereco |= 0b00000001;
+
+	if(pinconf0[GPIO_DATAIN/4] & (1 << 11))
+		endereco |= 0b00000010;
+
+	if(pinconf0[GPIO_DATAIN/4] & (1 << 9))
+		endereco |= 0b00000100;
+
+	if(pinconf2[GPIO_DATAIN/4] & (1 << 17))
+		endereco |= 0b00001000;
+
+	if(pinconf0[GPIO_DATAIN/4] & (1 << 8))
+		endereco |= 0b00010000;
+
+	close(fd);
+
+	return endereco;
+}
+
+
 
 
 
@@ -118,6 +172,11 @@ int init_start_PRU(int baudrate, char mode){
 	// ----- Inicializacao SLAVE: nenhuma mensagem nova na serial
 	if(prudata[25]=='S')
 		prudata[1]=MENSAGEM_ANTIGA;
+
+
+	// Endereco de Hardware
+	prudata[26] = hardware_address_serialPRU();
+
 
 
 	// ----- Configuracao Baudrate
@@ -193,7 +252,7 @@ int init_start_PRU(int baudrate, char mode){
 
 
 	// ----- Executar codigo na PRU
-	prussdrv_exec_program (PRU_NUM, "/usr/bin/485-BBB.bin");
+	prussdrv_exec_program (PRU_NUM, "/usr/bin/PRUserial485.bin");
 
 	return 0;
 }
@@ -280,7 +339,6 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
 
 			// ----- Sinaliza mensagem antiga
 			prudata[1] = MENSAGEM_ANTIGA;
-			while(prudata[1] != MENSAGEM_ANTIGA);
 
 			return 0;
 		}
