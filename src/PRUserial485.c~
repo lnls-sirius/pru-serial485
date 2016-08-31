@@ -123,10 +123,9 @@ int clear_pulse_count_sync(){
 
 
 uint16_t read_pulse_count_sync(){
-	uint16_t counting = 0;
-        if(prudata[25] == 'M') 
-                counting = (prudata[81] << 8) + prudata[80];
-	return counting;
+        if(prudata[25] == 'M'){ 
+                return ((prudata[81] << 8) + prudata[80]);
+	}
 }
 
 

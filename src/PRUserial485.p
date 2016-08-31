@@ -5,7 +5,7 @@
 #define OFFSET_SHRAM_READ			0x64		// 100 general purpose bytes
 #define OFFSET_SHRAM_WRITE			r19			// 6kB (0x1800) offset to be set
 #define OFFSET_SHRAM_SYNC			0x32		// 50 - Start of sync message
-
+#define OFFSET_SHRAM_SYNC_COUNT			0x50		// 80 - Start of sync pulse counting
 #define OFFSET_SEND_COMMAND			0x69
 
 
@@ -195,10 +195,6 @@ OPERATION_MODE_MASTER:
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
 // Wait for sync pulse: Apenas borda de subida
 	WBS SYNC
-
-// ~~~~~~~~~ Sinaliza inicio envio
-	SET	LED_WRITE
-
 	
 //	Envia comando de sincronismo
 	ZERO 	&BLOCKS, 4
@@ -217,10 +213,6 @@ LOAD_FROM_MEMORY_SYNC:
 	QBNE	LOAD_FROM_MEMORY_SYNC,I,BLOCKS				// Se I == NUMERO DE BLOCOS, termina loop
 	 
 	CS_UP
-
-// ~~~~~~~~~ Sinaliza Fim Envio
-	CLR	LED_WRITE
-
 	
 // Delay: aguarda antes de verificar se ha dados para enviar
 DELAY_CONFIG:
@@ -232,6 +224,15 @@ DELAY_CONFIG:
 LOOP_DELAY:	
 	ADD	I,I,1											
 	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE	
+
+
+UPDATE_PULSE_COUNTING:
+        ZERO    &I, 4
+        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 2                //Load current pulse count
+	ADD	I,I,1
+	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,2		// Store pulse count++	
+
+
 
 	WBC SYNC
 
@@ -269,9 +270,6 @@ WAIT_FOR_DATA:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
  
  RECEIVE_DATA_OK:
-
-// ~~~~~~~ Sinaliza Receive ~~~~~~~~~
-//	SET LED_READ
  
  // ~~~~~ Int por RxFIFO nao-vazio ~~~~~~~~~
 	CS_DOWN
@@ -300,11 +298,7 @@ WAIT_RECEIVED:
 
 	QBBS	WAIT_RECEIVED, IRQ				// Dados sendo recebidos: quebra loop e continua
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-
-// ~~~~~~~ Sinaliza Receive ~~~~~~~~~
-        SET LED_READ	
+	
 
 // Habilita Interrupcao RxTimeout 
 	CS_DOWN
@@ -396,7 +390,6 @@ STORE_LAST64_MEMORY:
 	READ_LSR
 	
 // Procedimento concluido
-	CLR	LED_READ
  	JMP	DATA_READY
 // ------------------------------------------------------------------------------------------------
  

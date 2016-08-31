@@ -67,16 +67,13 @@ def PRUserial485_sync_start():
 def PRUserial485_sync_stop():
     libPRUserial485.set_sync_stop_PRU()
 
-
 # Zera contador de pulsos - Sync
 def PRUserial485_address():
-    return(libPRUserial485.clear_pulse_count_sync())
-
+    return(libPRUserial485.hardware_address_serialPRU())
 
 # Leitura do contador de pulsos - Sync
 def PRUserial485_address():
-    return(libPRUserial485.read_pulse_count_sync())
-
+    return(libPRUserial485.hardware_address_serialPRU())
 
 # Retorna endereco fisico da placa
 def PRUserial485_address():
