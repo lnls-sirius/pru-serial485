@@ -33,7 +33,7 @@ int init_start_PRU(int baudrate, char mode);
  * --Parametros--
  * data: valores a serem enviados
  * tamanho: quantidade de bytes a serem enviados (tamanho util do vetor data)
- * timeout_ms: tempo maximo de espera para receber uma resposta (em ms). Se 0, nao aguarda resposta.
+ * timeout_ms: tempo maximo de espera para receber uma resposta (em ms). Minimo: 15ns / Maximo: 64s. Se 0, nao aguarda resposta.
  *  ##### ATENCAO: no MODO SLAVE o parametro TIMEOUT_MS e ignorado. #####
  *
  *
