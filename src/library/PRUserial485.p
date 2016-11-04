@@ -53,7 +53,7 @@
 #define MODE_1						0x90	// MODE 1 ----
 #define MODE_2						0x80	// MODE 2 ---- EchoSuppr
 #define LCR							0x03	// LCR
-#define RXTIMEOUT					0x02	// RxTimeOut -- 2 words
+#define RXTIMEOUT					0x13	// RxTimeOut -- 2 words
 #define	HDPLXDELAY					0x11	// HDplxDelay -- 1 bit
 
 #define CLOCK_CONFIG_ADDRESS		0x9a	// CLOCK_WRITE_END
@@ -137,7 +137,9 @@ START:
 	SEND_SPI MODE_1, 8
 	SEND_SPI MODE_2, 8
 	SEND_SPI LCR, 8
-	SEND_SPI RXTIMEOUT, 8
+    LBCO	I, SHRAM_BASE, 32, 1								// RXTIMEOUT
+	SEND_SPI I, 8											    //
+	//SEND_SPI RXTIMEOUT, 8
 	SEND_SPI HDPLXDELAY, 8
 	CS_UP
 
@@ -660,15 +662,16 @@ PROCEDURE_START_SLAVE:
 
 
 START_SLAVE:
-	READ_ISR
-	READ_LSR
+    NOP
+	//READ_ISR
+	//READ_LSR
 
 
  // ----- RECEBER DADOS ---------------------------------------------------------------------------
  RECEIVE_DATA_SLAVE:
 
 // Reset FIFO UART
-	RESET_FIFO_UART
+	//RESET_FIFO_UART
 
  // ~~~~~ Int por RxFIFO nao-vazio ~~~~~~~~~
 	CS_DOWN
@@ -684,7 +687,13 @@ START_SLAVE:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 	READ_ISR
+    CLR LED_IDLE
 
+//WAIT_BUFFER_READ:
+// ----- Verifica se buffer de leitura foi lido  -----
+//    LBCO	I, SHRAM_BASE, 1, 1
+//    QBNE	WAIT_BUFFER_READ, I.b0, 0x55		// 0x55 : Mensagem antiga
+// -------------------------------------------
 
 // ~~~~~ Verifica recepcao de dados ~~~~~~~~
 WAIT_RECEIVED_SLAVE:
@@ -699,7 +708,6 @@ WAIT_RECEIVED_SLAVE:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-//	SET LED_READ
 
 // Habilita Interrupcao RxTimeout
 	CS_DOWN
@@ -722,7 +730,7 @@ WAIT_RECEIVED_SLAVE:
 
 
 
-// Le RxLevel até ser >= 16 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
+// Le RxLevel até ser >= 32 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
 RXLEVEL_AND_TIMEOUT_SLAVE:
 
 	QBBC 	STORE_LEFTBYTES_SLAVE, IRQ		// RxTimeout Interrupt. Fim de mensagem
@@ -733,8 +741,8 @@ RXLEVEL_AND_TIMEOUT_SLAVE:
 	RECEIVE_SPI  8
 	CS_UP
 
-	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 4
-	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0	// Aguarda Buffer TX >= 0x0001 0000 = 16
+	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 5
+	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0	// Aguarda Buffer TX >= 0x0001 0000 = 32
 
 
  // Armazena 16 bytes na SHRAM
@@ -749,7 +757,7 @@ STORE_16_MEMORY_SLAVE:
 	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1			// Armazena no byte I da shram
 	ADD		J,J,1
 
-	QBNE	STORE_16_MEMORY_SLAVE,J,0x10			// Se J == 16, termina loop
+	QBNE	STORE_16_MEMORY_SLAVE,J,0x20			// Se J == 32, termina loop
 	CS_UP
 
 	JMP 	RXLEVEL_AND_TIMEOUT_SLAVE
@@ -757,6 +765,7 @@ STORE_16_MEMORY_SLAVE:
 
  // Armazena bytes restantes - Interrupcao RxTimeout
 STORE_LEFTBYTES_SLAVE:
+    SET LED_IDLE
  // Le Rx FIFO Level
 	CS_DOWN
 	SEND_SPI 0x12, 8
@@ -787,8 +796,8 @@ STORE_LAST16_MEMORY_SLAVE:
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 		// Armazena tamanho nos primeiros bytes
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-	READ_ISR
-	READ_LSR
+	//READ_ISR
+	//READ_LSR
 
 	CS_DOWN
 	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
@@ -797,6 +806,8 @@ STORE_LAST16_MEMORY_SLAVE:
 
 
 // ************* VERIFICA MENSAGEM DE SINCRONISMO
+    QBNE DATA_READY_SLAVE, I, 0x06
+
 	// Configura pointer para SHRAM_WRITE
         ZERO    &I, 4
         ADD     I,OFFSET_SHRAM_WRITE, 4                           // I pointer to the start of valid data SHRAM[0x1804]
@@ -855,6 +866,8 @@ UPDATE_MSG_COUNTING:
 // ----- ENVIO DE DADOS - MODO SLAVE --------------------------------------------------------------
  SEND_DATA_SLAVE:
 
+ READ_ISR
+ READ_LSR
  	CALL SEND_DATA_UART
 
  	MOV	I, MENSAGEM_ANTIGA

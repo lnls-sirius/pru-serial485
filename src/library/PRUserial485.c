@@ -75,6 +75,8 @@ Date: April/2018
  * prudata[26..28] = 1 Serial Byte length (ns)
  * prudata[29..31] = Delay Sync-Normal command (x10ns)
  *
+ * prudata[32] = MAX3107 RXTIMEOUT
+ *
  * SHRAM[50]~SHRAM[99] - Sync Operation
  * prudata[50] = data size
  * prudata[51..] = data
@@ -481,7 +483,7 @@ uint8_t read_curve_block(){
 
 
 
-void *monitorSlaveMode(void *arg){
+void *monitorRecvBuffer(void *arg){
     while(thread_control){
         // ----- Aguarda sinal de finalizacao do ciclo
         if(prudata[25] == "M"){
@@ -497,7 +499,7 @@ void *monitorSlaveMode(void *arg){
         // ----- Nova mensagem recebida !
             while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){}
 
-            if(prudata[1] == MENSAGEM_RECEBIDA_NOVA){
+
             // ----- Copia dos dados recebidos
             uint32_t tamanho = 0;
 
@@ -514,9 +516,10 @@ void *monitorSlaveMode(void *arg){
                     pru_pointer = 0;
                 }
             }
+
             // ----- Sinaliza mensagem antiga
             prudata[1] = MENSAGEM_ANTIGA;
-        }
+
     }
 }
 
@@ -565,13 +568,15 @@ int init_start_PRU(int baudrate, char mode){
   prudata[80] = 0;
   prudata[81] = 0;
 
-  // ----- Inicializacao MASTER: procedimento sincrono desabilitado
+  // ----- Inicializacao MASTER: procedimento sincrono desabilitado e RxTimeOut = 2 bytes
   if(prudata[25]=='M')
     set_sync_stop_PRU();
+    prudata[32] = 0x02;
 
-  // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial
+  // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 20 bytes
   if(prudata[25]=='S')
     prudata[1]=MENSAGEM_ANTIGA;
+    prudata[32] = 0x14;
 
 
   // Endereco de Hardware
@@ -645,7 +650,7 @@ int init_start_PRU(int baudrate, char mode){
       break;
 
     default:
-      close_PRU();    // Nao definido
+      close_PRU();    // BR nao definido
       // printf("Baudrate not defined.\n");
       return ERR_INIT_PRU_BAUDR;
   }
@@ -677,20 +682,14 @@ int init_start_PRU(int baudrate, char mode){
   prussdrv_exec_program (PRU_NUM, PRU_BINARY);
 
 
-  // ----- Se modo slave, lanca thread para monitorar recebimento de dados
-  if(prudata[25]=='S'){
+  // ----- Lanca thread para monitorar recebimento de dados
+  //        e reinicializa ponteiros
+    pru_pointer = 0;
+    read_pointer = 0;
       if(tid == 0){
           thread_control = 1;
-          pthread_create(&tid, NULL, monitorSlaveMode, NULL);
+          pthread_create(&tid, NULL, monitorRecvBuffer, NULL);
       }
-
-  }
-  if(prudata[25]=='M'){
-      thread_control = 0;
-      pthread_join(tid,NULL);
-      tid = 0;
-  }
-
 
   return OK;
 }
@@ -701,6 +700,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
   uint32_t timeout_instructions;
   float timeout_inst;
+
 
   timeout_inst = timeout_ms*66600;
   timeout_instructions = (int)timeout_inst;
@@ -733,12 +733,10 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
   prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
 
 
+  // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
   if(prudata[25]=='M'){
-      // Aguarda dados prontos na Shared RAM
-
-      while(prudata[1] != 0x00){
-      }
-
+      while(prudata[1] != MENSAGEM_RECEBIDA_NOVA);
+      /*
       uint32_t tamanho = 0;
 
       // ----- Copia dos dados recebidos
@@ -755,12 +753,13 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
             pru_pointer = 0;
         }
       }
+      */
   }
 
   // ----- SLAVE: Aguarda fim de envio
-  if(prudata[25]=='S')
+  if(prudata[25]=='S'){
     while(prudata[1] != 0x55);
-
+  }
   return OK;
 }
 
