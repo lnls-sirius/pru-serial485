@@ -484,42 +484,41 @@ uint8_t read_curve_block(){
 
 
 void *monitorRecvBuffer(void *arg){
+    // ----- Copia dos dados recebidos
+    uint32_t tamanho;
+
     while(thread_control){
         // ----- Aguarda sinal de finalizacao do ciclo
+        tamanho = 0;
+
         if(prudata[25] == "M"){
-        prussdrv_pru_wait_event(PRU_EVTOUT_1);
-        prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+            prussdrv_pru_wait_event(PRU_EVTOUT_1);
+            prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
         }
         else{
-        prussdrv_pru_wait_event(PRU_EVTOUT_0);
-        prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
+            prussdrv_pru_wait_event(PRU_EVTOUT_0);
+            prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
         }
 
-
         // ----- Nova mensagem recebida !
-            while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){}
+        while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){}
 
 
-            // ----- Copia dos dados recebidos
-            uint32_t tamanho = 0;
-
-            // ----- Copia dos dados recebidos
-            // Tamanho
-            for(i=0; i<4; i++)
-            tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
-            // Dados
-            for(i=0; i<tamanho; i++){
-                receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+i];
-                pru_pointer++;
-                // Reset pru_pointer
-                if(pru_pointer == BUFF_SIZE){
-                    pru_pointer = 0;
-                }
+        // ----- Copia dos dados recebidos
+        // Tamanho
+        for(i=0; i<4; i++)
+        tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+        // Dados
+        for(i=0; i<tamanho; i++){
+            receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+i];
+            pru_pointer++;
+            // Reset pru_pointer
+            if(pru_pointer == BUFF_SIZE){
+                pru_pointer = 0;
             }
-
-            // ----- Sinaliza mensagem antiga
-            prudata[1] = MENSAGEM_ANTIGA;
-
+        }
+        // ----- Sinaliza mensagem antiga
+        prudata[1] = MENSAGEM_ANTIGA;
     }
 }
 
@@ -573,15 +572,13 @@ int init_start_PRU(int baudrate, char mode){
     set_sync_stop_PRU();
     prudata[32] = 0x02;
 
-  // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 20 bytes
+  // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
   if(prudata[25]=='S')
     prudata[1]=MENSAGEM_ANTIGA;
-    prudata[32] = 0x14;
-
+    prudata[32] = 0x10;
 
   // Endereco de Hardware
   prudata[24] = hardware_address_serialPRU();
-
 
   // ----- Configuracao Baudrate
   uint32_t one_byte_length_ns = 0;
@@ -670,17 +667,14 @@ int init_start_PRU(int baudrate, char mode){
   fscanf(fp, "%x", &DDR_address[1]);
   fclose(fp);
 
-
   // Endereco da DDR
   prudata[15] = (DDR_address[0]) >> 0;    // LSByte [7..0]
   prudata[16] = (DDR_address[0]) >> 8;    // Byte [15..8]
   prudata[17] = (DDR_address[0]) >> 16;   // Byte [23..16]
   prudata[18] = (DDR_address[0]) >> 24;   // MSByte [31..24]
 
-
   // ----- Executar codigo na PRU
   prussdrv_exec_program (PRU_NUM, PRU_BINARY);
-
 
   // ----- Lanca thread para monitorar recebimento de dados
   //        e reinicializa ponteiros
@@ -690,7 +684,6 @@ int init_start_PRU(int baudrate, char mode){
           thread_control = 1;
           pthread_create(&tid, NULL, monitorRecvBuffer, NULL);
       }
-
   return OK;
 }
 
@@ -701,10 +694,8 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
   uint32_t timeout_instructions;
   float timeout_inst;
 
-
   timeout_inst = timeout_ms*66600;
   timeout_instructions = (int)timeout_inst;
-
 
   // ----- MASTER: Configuracao do Timeout
   if(prudata[25]=='M'){

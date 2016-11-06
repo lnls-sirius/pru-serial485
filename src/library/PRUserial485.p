@@ -689,11 +689,6 @@ START_SLAVE:
 	READ_ISR
     CLR LED_IDLE
 
-//WAIT_BUFFER_READ:
-// ----- Verifica se buffer de leitura foi lido  -----
-//    LBCO	I, SHRAM_BASE, 1, 1
-//    QBNE	WAIT_BUFFER_READ, I.b0, 0x55		// 0x55 : Mensagem antiga
-// -------------------------------------------
 
 // ~~~~~ Verifica recepcao de dados ~~~~~~~~
 WAIT_RECEIVED_SLAVE:
@@ -724,6 +719,16 @@ WAIT_RECEIVED_SLAVE:
 	READ_ISR
 	READ_LSR
 
+
+
+
+// Aguarda dados anteriores copiados
+WAIT_OLD_MSG:
+	LBCO	I, SHRAM_BASE, 1, 1
+	QBNE	WAIT_OLD_MSG, I.b0, 0x55		// 0x55 : copiado.
+// -------------------------------------------
+
+
 // Configura ponteiro para SHRAM_WRITE
 	ZERO	&I, 4
 	ADD	I,OFFSET_SHRAM_WRITE, 3			// I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
@@ -741,8 +746,8 @@ RXLEVEL_AND_TIMEOUT_SLAVE:
 	RECEIVE_SPI  8
 	CS_UP
 
-	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 5
-	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0	// Aguarda Buffer TX >= 0x0001 0000 = 32
+	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 4
+	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0	// Aguarda Buffer TX >= 0x0000 1000 = 8
 
 
  // Armazena 16 bytes na SHRAM
@@ -757,7 +762,7 @@ STORE_16_MEMORY_SLAVE:
 	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1			// Armazena no byte I da shram
 	ADD		J,J,1
 
-	QBNE	STORE_16_MEMORY_SLAVE,J,0x20			// Se J == 32, termina loop
+	QBNE	STORE_16_MEMORY_SLAVE,J,0x08			// Se J == 16, termina loop
 	CS_UP
 
 	JMP 	RXLEVEL_AND_TIMEOUT_SLAVE
@@ -866,8 +871,8 @@ UPDATE_MSG_COUNTING:
 // ----- ENVIO DE DADOS - MODO SLAVE --------------------------------------------------------------
  SEND_DATA_SLAVE:
 
- READ_ISR
- READ_LSR
+ //READ_ISR
+ //READ_LSR
  	CALL SEND_DATA_UART
 
  	MOV	I, MENSAGEM_ANTIGA
