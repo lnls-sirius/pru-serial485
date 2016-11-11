@@ -69,12 +69,12 @@ def PRUserial485_sync_stop():
 
 
 # Zera contador de pulsos - Sync
-def PRUserial485_address():
+def PRUserial485_clear_pulse_count_sync():
     return(libPRUserial485.clear_pulse_count_sync())
 
 
 # Leitura do contador de pulsos - Sync
-def PRUserial485_address():
+def PRUserial485_read_pulse_count_sync():
     return(libPRUserial485.read_pulse_count_sync())
 
 
