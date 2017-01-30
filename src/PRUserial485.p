@@ -415,7 +415,8 @@ DATA_READY:
 	SEND_SPI 0x00, 8				// Desabilita interrupcoes
 	CS_UP
 
-	SBCO	0x00, SHRAM_BASE, 1, 1			// Confirma Dados Recebidos prudata[1]=0x00
+    MOV     I, MENSAGEM_RECEBIDA_NOVA
+	SBCO	I, SHRAM_BASE, 1, 1			// Confirma Dados Recebidos prudata[1]=0x00
 	
 
 	MOV 	r31.b0, PRU1_ARM_INTERRUPT+16
@@ -642,8 +643,11 @@ DATA_READY_SLAVE:
 
 
 	CLR	LED_READ
-
-	SBCO	0x00, SHRAM_BASE, 1, 1	
+	
+	
+    MOV     I, MENSAGEM_RECEBIDA_NOVA       // Confirma Dados Recebidos prudata[1]=0x00
+	SBCO	I, SHRAM_BASE, 1, 1	
+	
 
 	CS_DOWN
 	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
