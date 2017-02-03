@@ -41,7 +41,7 @@ def PRUserial485_write(request, reply_timeout):
         return
     i = 0
     while (i < len(request)):
-        data_buffer[i] = ord(request[i])
+        data_buffer[i] = int(request[i])
         i += 1
     data_size.value = len(request)
     libPRUserial485.send_data_PRU(ctypes.byref(data_buffer), ctypes.byref(data_size), ctypes.c_float(reply_timeout))
