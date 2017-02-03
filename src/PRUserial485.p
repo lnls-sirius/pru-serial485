@@ -194,6 +194,7 @@ OPERATION_MODE_MASTER:
 	
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
 // Wait for sync pulse: Apenas borda de subida
+	WBC SYNC
 	WBS SYNC
 	
 //	Envia comando de sincronismo
@@ -214,27 +215,16 @@ LOAD_FROM_MEMORY_SYNC:
 	 
 	CS_UP
 	
-// Delay: aguarda antes de verificar se ha dados para enviar
-DELAY_CONFIG:
-	ZERO	&I, 4
-	ZERO	&TIMEOUT_VALUE, 4
-	ADD	TIMEOUT_VALUE, TIMEOUT_VALUE, 0xe2
-	LSL	TIMEOUT_VALUE, TIMEOUT_VALUE, 4						
-
-LOOP_DELAY:	
-	ADD	I,I,1											
-	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE	
+	
 
 
 UPDATE_PULSE_COUNTING:
         ZERO    &I, 4
-        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 2                //Load current pulse count
+        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 2   //Load current pulse count
 	ADD	I,I,1
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,2		// Store pulse count++	
 
 
-
-	WBC SYNC
 
 // ------------------------------------------------------------------------------------------------	
 	
@@ -246,13 +236,33 @@ WAIT_FOR_DATA:
 
 	LBCO	I, SHRAM_BASE, 1, 1
 	QBNE	OPERATION_MODE_MASTER, I.b0, 0xff	// Se nao, volta a verificar condicao de sincronismo
-	
-	RESET_FIFO_UART
+
+// Le TX FIFO Level
+WAIT_TX_ZERO:
+	CS_DOWN
+	SEND_SPI 0x11, 8 
+	RECEIVE_SPI  8
+	CS_UP
+
+	QBNE	WAIT_TX_ZERO, BUFFER_SPI_IN, 0	// Aguarda Buffer TX = 0
+
+
 	
 // ------------------------------------------------------------------------------------------------
- 
+ // Delay: aguarda antes de enviar dados
+DELAY_CONFIG:
+	ZERO	&I, 4
+	ZERO	&TIMEOUT_VALUE, 4
+	ADD	TIMEOUT_VALUE, TIMEOUT_VALUE, 0x28
+	LSL	TIMEOUT_VALUE, TIMEOUT_VALUE, 8	
+	ADD	TIMEOUT_VALUE, TIMEOUT_VALUE, 0x80					
+
+LOOP_DELAY:	
+	ADD	I,I,1											
+	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE
  
  // ----- ENVIAR DADOS ----------------------------------------------------------------------------
+	RESET_FIFO_UART
 	CALL SEND_DATA_UART
 	 
  // Aguardar resposta 
