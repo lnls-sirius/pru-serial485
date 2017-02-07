@@ -134,7 +134,7 @@ uint16_t read_pulse_count_sync(){
 
 
 
-void set_sync_start_PRU(){
+void set_sync_start_PRU(uint32_t delay_ns){
 	if(prudata[25]=='M'){
 		clear_pulse_count_sync();
 
