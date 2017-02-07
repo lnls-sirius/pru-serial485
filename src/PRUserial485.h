@@ -80,10 +80,12 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
 /* PROCEDIMENTO SINCRONO - START
  *
  * SOMENTE MODO MASTER
+ * --Parametro--
+ * delay_ns: tempo entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: nanossegundos.
  *
  * Sinaliza o inicio do procedimento sincrono via PRU
 */
-void set_sync_start_PRU();
+void set_sync_start_PRU(uint32_t delay_ns);
 
 
 
