@@ -219,6 +219,7 @@ int init_start_PRU(int baudrate, char mode){
 
 
 	// ----- Configuracao Baudrate
+	uint32_t one_byte_length_ns = 0;
 	switch (baudrate){
 		case 6:
 		    prudata[2] = 0x28;		// BRGCONFIG
