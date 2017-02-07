@@ -6,6 +6,7 @@
 #define OFFSET_SHRAM_WRITE			r19			// 6kB (0x1800) offset to be set
 #define OFFSET_SHRAM_SYNC			0x32		// 50 - Start of sync message
 #define OFFSET_SHRAM_SYNC_COUNT			0x50		// 80 - Start of sync pulse counting
+#define OFFSET_SHRAM_SYNC_DELAY		29		    // Time between sync and normal command 
 #define OFFSET_SEND_COMMAND			0x69
 
 
@@ -249,13 +250,12 @@ WAIT_TX_ZERO:
 
 	
 // ------------------------------------------------------------------------------------------------
- // Delay: aguarda antes de enviar dados
+// Delay: aguarda antes de enviar dados
 DELAY_CONFIG:
 	ZERO	&I, 4
 	ZERO	&TIMEOUT_VALUE, 4
-	ADD	TIMEOUT_VALUE, TIMEOUT_VALUE, 0x28
-	LSL	TIMEOUT_VALUE, TIMEOUT_VALUE, 8	
-	ADD	TIMEOUT_VALUE, TIMEOUT_VALUE, 0x80					
+	LBCO	TIMEOUT_VALUE, SHRAM_BASE, OFFSET_SHRAM_SYNC_DELAY, 3
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~								
 
 LOOP_DELAY:	
 	ADD	I,I,1											
