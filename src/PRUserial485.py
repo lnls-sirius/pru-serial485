@@ -59,8 +59,8 @@ def PRUserial485_read():
 
 
 # Inicia operação em modo síncrono
-def PRUserial485_sync_start():
-    libPRUserial485.set_sync_start_PRU()
+def PRUserial485_sync_start(delay):
+    libPRUserial485.set_sync_start_PRU(delay)
 
 
 # Finaliza a operação em modo síncrono
