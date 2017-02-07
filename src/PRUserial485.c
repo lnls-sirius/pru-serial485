@@ -46,6 +46,8 @@
  * prudata[6..9] = Timeout
  *
  * prudata[25] = Master/Slave ('M'/'S')
+  * prudata[26..28] = 1 Serial Byte length (ns)
+ * prudata[29..31] = Delay Sync-Normal command (ns)
  *
  * SHRAM[50]~SHRAM[99] - Sync Operation
  * prudata[50] = data size
@@ -135,6 +137,20 @@ uint16_t read_pulse_count_sync(){
 void set_sync_start_PRU(){
 	if(prudata[25]=='M'){
 		clear_pulse_count_sync();
+
+		// Delay entre comando de sincronismo e requisicao qualquer
+		// ----- Calculo do delay
+		for(i=0; i<3; i++)
+			delay_ns += prudata[26+i] << i*8;
+
+		// ---- Numero de loops = delay / 10 ns
+		delay_ns = delay_ns/10;
+
+		// ----- Armazena numero de instrucoes
+		for(i=0; i<3; i++)
+			prudata[29+i] = delay_ns >> i*8;
+		
+		// Inicio modo sincrono
 		prudata[5] = 0xff;
 	}
 }
@@ -208,54 +224,63 @@ int init_start_PRU(int baudrate, char mode){
 		    prudata[2] = 0x28;		// BRGCONFIG
 		    prudata[3] = 0x02;		// DIVLSB
 		    prudata[4] = 0x00;		// DIVMSB
+		    one_byte_length_ns = (int) 10000/6;
 		    break;
 
 		case 10:
 		    prudata[2] = 0x28;		// BRGCONFIG
 		    prudata[3] = 0x01;		// DIVLSB
 		    prudata[4] = 0x00;		// DIVMSB
+		    one_byte_length_ns = (int) 10000/10;
 		    break;
 
 		case 12:
 		    prudata[2] = 0x24;		// BRGCONFIG
 		    prudata[3] = 0x01;		// DIVLSB
 		    prudata[4] = 0x00;		// DIVMSB
+		    one_byte_length_ns = (int) 10000/12;
 		    break;
 
 		case 9600:
 			prudata[2] = 0x0a;	// BRGCONFIG
 			prudata[3] = 0x86;	// DIVLSB
 			prudata[4] = 0x01;	// DIVMSB
+			one_byte_length_ns = (int) 100000000/96;
 			break;
 
 		case 14400:
 			prudata[2] = 0x07;	// BRGCONFIG
 			prudata[3] = 0x04;	// DIVLSB
 			prudata[4] = 0x01;	// DIVMSB
+			one_byte_length_ns = (int) 100000000/144;
 			break;
 
 		case 19200:
 			prudata[2] = 0x05;	// BRGCONFIG
 			prudata[3] = 0xc3;	// DIVLSB
 			prudata[4] = 0x00;	// DIVMSB
+			one_byte_length_ns = (int) 100000000/192;
 			break;
 
 		case 38400:
 			prudata[2] = 0x15;	// BRGCONFIG
 			prudata[3] = 0xc3;	// DIVLSB
 			prudata[4] = 0x00;	// DIVMSB
+			one_byte_length_ns = (int) 100000000/384;
 			break;
 
 		case 57600:
 			prudata[2] = 0x27;	// BRGCONFIG
 			prudata[3] = 0x04;	// DIVLSB
 			prudata[4] = 0x01;	// DIVMSB
+			one_byte_length_ns = (int) 100000000/576;
 			break;
 
 		case 115200:
 			prudata[2] = 0x09;	// BRGCONFIG
 			prudata[3] = 0x20;	// DIVLSB
 			prudata[4] = 0x00;	// DIVMSB
+			one_byte_length_ns = (int) 100000000/1152;
 			break;
 
 		default:
@@ -263,6 +288,11 @@ int init_start_PRU(int baudrate, char mode){
 			printf("Baudrate not defined.\n");
 			return -1;
 	}
+	prudata[26] = one_byte_length_ns;
+	prudata[27] = one_byte_length_ns >> 8;
+	prudata[28] = one_byte_length_ns >>16;
+	
+	
 
 	// ----- Instrucao - Passo Sync
 	prudata[50] = 0x06;				// Tamanho
