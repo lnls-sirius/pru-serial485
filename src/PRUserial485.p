@@ -194,11 +194,7 @@ OPERATION_MODE_MASTER:
 	
 	
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
-// Wait for sync pulse: Apenas borda de subida
-	WBC SYNC
-	WBS SYNC
-	
-//	Envia comando de sincronismo
+//	Prepara comando de sincronismo
 	ZERO 	&BLOCKS, 4
 	LBCO	BLOCKS, SHRAM_BASE, OFFSET_SHRAM_SYNC, 1		// Tamanho do bloco
 	
@@ -208,6 +204,12 @@ OPERATION_MODE_MASTER:
 	CS_DOWN
 	SEND_SPI 0x80,8							// Comando Envio (MAX3107)
 
+
+// Wait for sync pulse: Apenas borda de subida
+	WBC SYNC
+	WBS SYNC
+	
+//	Envia comando de sincronismo
 LOAD_FROM_MEMORY_SYNC:	
 		ADD		I,I,1
 		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1		// Carrega byte da shram
