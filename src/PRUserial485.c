@@ -47,7 +47,7 @@
  *
  * prudata[25] = Master/Slave ('M'/'S')
   * prudata[26..28] = 1 Serial Byte length (ns)
- * prudata[29..31] = Delay Sync-Normal command (ns)
+ * prudata[29..31] = Delay Sync-Normal command (x10ns)
  *
  * SHRAM[50]~SHRAM[99] - Sync Operation
  * prudata[50] = data size
@@ -134,9 +134,11 @@ uint16_t read_pulse_count_sync(){
 
 
 
-void set_sync_start_PRU(uint32_t delay_ns){
+void set_sync_start_PRU(uint32_t delay_us){
 	if(prudata[25]=='M'){
 		clear_pulse_count_sync();
+		
+		uint32_t delay_ns = delay_us * 1000;
 
 		// Delay entre comando de sincronismo e requisicao qualquer
 		// ----- Calculo do delay
