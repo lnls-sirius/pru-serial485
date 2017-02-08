@@ -303,8 +303,8 @@ int init_start_PRU(int baudrate, char mode){
 	prudata[52] = 0x50;				// |
 	prudata[53] = 0x00;				// | Comando a ser enviado
 	prudata[54] = 0x01;				// | apos pulso de sync
-	prudata[55] = 0x05;				// |
-	prudata[56] = 0xab;				// |
+	prudata[55] = 0x0c;				// |
+	prudata[56] = 0xa4;				// |
 
 
 	// ----- Executar codigo na PRU
