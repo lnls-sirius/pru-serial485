@@ -225,7 +225,28 @@ UPDATE_PULSE_COUNTING:
 	ADD	I,I,1
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,2		// Store pulse count++	
 
+// Le TX FIFO Level - Aguarda ate final do envio
+WAIT_TX_ZERO:
+	CS_DOWN
+	SEND_SPI 0x11, 8 
+	RECEIVE_SPI  8
+	CS_UP
 
+	QBNE	WAIT_TX_ZERO, BUFFER_SPI_IN, 0	// Aguarda Buffer TX = 0
+
+
+	
+// ------------------------------------------------------------------------------------------------
+// Delay: aguarda antes de enviar requisicao normal
+DELAY_CONFIG:
+	ZERO	&I, 4
+	ZERO	&TIMEOUT_VALUE, 4
+	LBCO	TIMEOUT_VALUE, SHRAM_BASE, OFFSET_SHRAM_SYNC_DELAY, 3
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~								
+
+LOOP_DELAY:	
+	ADD	I,I,1											
+	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE
 
 // ------------------------------------------------------------------------------------------------	
 	
@@ -238,28 +259,7 @@ WAIT_FOR_DATA:
 	LBCO	I, SHRAM_BASE, 1, 1
 	QBNE	OPERATION_MODE_MASTER, I.b0, 0xff	// Se nao, volta a verificar condicao de sincronismo
 
-// Le TX FIFO Level
-WAIT_TX_ZERO:
-	CS_DOWN
-	SEND_SPI 0x11, 8 
-	RECEIVE_SPI  8
-	CS_UP
 
-	QBNE	WAIT_TX_ZERO, BUFFER_SPI_IN, 0	// Aguarda Buffer TX = 0
-
-
-	
-// ------------------------------------------------------------------------------------------------
-// Delay: aguarda antes de enviar dados
-DELAY_CONFIG:
-	ZERO	&I, 4
-	ZERO	&TIMEOUT_VALUE, 4
-	LBCO	TIMEOUT_VALUE, SHRAM_BASE, OFFSET_SHRAM_SYNC_DELAY, 3
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~								
-
-LOOP_DELAY:	
-	ADD	I,I,1											
-	QBNE	LOOP_DELAY, I, TIMEOUT_VALUE
  
  // ----- ENVIAR DADOS ----------------------------------------------------------------------------
 	RESET_FIFO_UART
