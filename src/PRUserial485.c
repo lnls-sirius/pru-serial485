@@ -111,7 +111,7 @@ uint8_t hardware_address_serialPRU(){
 
 
 int clear_pulse_count_sync(){
-        if(prudata[25]=='M' && prudata[5]==0x00){       // Sync disabled. Clear pulse counting
+        if(prudata[5]==0x00){                           // Sync disabled. Clear pulse counting
                 prudata[80] = 0;
                 prudata[81] = 0;
                 return 0;
@@ -126,8 +126,7 @@ int clear_pulse_count_sync(){
 
 uint16_t read_pulse_count_sync(){
 	uint16_t counting = 0;
-        if(prudata[25] == 'M') 
-                counting = (prudata[81] << 8) + prudata[80];
+    counting = (prudata[81] << 8) + prudata[80];
 	return counting;
 }
 
@@ -205,6 +204,9 @@ int init_start_PRU(int baudrate, char mode){
 		return -1;
 	}
 
+    // ----- Inicializacao: contador de sincronismo zerado
+	prudata[80] = 0;
+    prudata[81] = 0;
 
 	// ----- Inicializacao MASTER: procedimento sincrono desabilitado
 	if(prudata[25]=='M')
