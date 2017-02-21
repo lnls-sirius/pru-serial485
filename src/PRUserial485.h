@@ -110,13 +110,12 @@ uint8_t hardware_address_serialPRU();
 
 /* ZERA CONTADOR DE PULSOS - SINCRONISMO
  * 
- * SOMENTE MODO MASTER
  *
  * Se o sincronismo estiver desabilitado, zera contador de pulsos
  *
  * --Retorno--
  * 0:  	apos zerar contador
- * 1: Caso o modo sincrono esteja habilitado ou modo slave esta configurado		
+ * 1: Caso o modo sincrono esteja habilitado no modo master	
 */
 int clear_pulse_count_sync();
 
@@ -124,10 +123,10 @@ int clear_pulse_count_sync();
 
 /* LEITURA CONTADOR DE PULSOS - SINCRONISMO
  * 
- * SOMENTE MODO MASTER
  *
  * --Retorno--
- * Valor do contador de pulsos	
+ * Valor do contador de pulsos
+ * (Contagem de pulsos físicos no modo MASTER --- Contagem de mensagem de passo sync no modo SLAVE)
 */
 uint16_t read_pulse_count_sync();
 
