@@ -609,19 +609,51 @@ STORE_LAST64_MEMORY_SLAVE:
 	CS_UP
 	
 	
-
-// ************* VERIFICA ENDERECO DA MENSAGEM
+// ************* VERIFICA MENSAGEM DE SINCRONISMO
 	// Configura pointer para SHRAM_WRITE
-//        ZERO    &I, 4
-//        ADD     I,OFFSET_SHRAM_WRITE, 4                           // I pointer to the start of valid data SHRAM[0x1804]
+        ZERO    &I, 4
+        ADD     I,OFFSET_SHRAM_WRITE, 4                           // I pointer to the start of valid data SHRAM[0x1804]
 
-	// Endereco (Dado[0]) alocado em J
-//	ZERO	&J, 4
-//	LBCO	J, SHRAM_BASE, I, 1	
+	// Dado[0] -- 0xFF
+	ZERO	&J, 4
+	LBCO	J, SHRAM_BASE, I, 1	
+	QBNE	DATA_READY_SLAVE, J, 0xff	
+	// Dado[1] -- 0x50
+	ZERO	&J, 4
+	ADD	I,I,1
+	LBCO	J, SHRAM_BASE, I, 1	
+	QBNE	DATA_READY_SLAVE, J, 0x50
+	// Dado[2] -- 0x00
+	ZERO	&J, 4
+	ADD	I,I,1
+	LBCO	J, SHRAM_BASE, I, 1	
+	QBNE	DATA_READY_SLAVE, J, 0x00
+	// Dado[3] -- 0x01
+	ZERO	&J, 4
+	ADD	I,I,1
+	LBCO	J, SHRAM_BASE, I, 1	
+	QBNE	DATA_READY_SLAVE, J, 0x01
+	// Dado[4] -- 0x0C
+	ZERO	&J, 4
+	ADD	I,I,1
+	LBCO	J, SHRAM_BASE, I, 1	
+	QBNE	DATA_READY_SLAVE, J, 0x0c
+	// Dado[5] -- 0xa4
+	ZERO	&J, 4
+	ADD	I,I,1
+	LBCO	J, SHRAM_BASE, I, 1	
+	QBNE	DATA_READY_SLAVE, J, 0xa4
 
-	// Se endereco diferente, ignora mensagem 
-//	QBNE	START_SLAVE, J, ENDERECO_HARDWARE	
+	// Mensagem integra - PISCA LED
+
+UPDATE_MSG_COUNTING:
+    ZERO    &I, 4
+    LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 2   //Load current count
+	ADD	I,I,1
+	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,2	// Store count++	
 // *******************
+
+
 
 
 
