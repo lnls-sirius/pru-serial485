@@ -45,8 +45,9 @@
  * prudata[5] = procedimento sincrono: START (0xFF) ou STOP (0x00)
  * prudata[6..9] = Timeout
  *
+ * prudata[24] = Board hardware address
  * prudata[25] = Master/Slave ('M'/'S')
-  * prudata[26..28] = 1 Serial Byte length (ns)
+ * prudata[26..28] = 1 Serial Byte length (ns)
  * prudata[29..31] = Delay Sync-Normal command (x10ns)
  *
  * SHRAM[50]~SHRAM[99] - Sync Operation
@@ -218,7 +219,7 @@ int init_start_PRU(int baudrate, char mode){
 
 
 	// Endereco de Hardware
-	prudata[26] = hardware_address_serialPRU();
+	prudata[24] = hardware_address_serialPRU();
 
 
 
