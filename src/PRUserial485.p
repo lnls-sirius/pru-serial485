@@ -157,7 +157,7 @@ START:
 
 // ~~~~~ ENDERECO EM HARDWARE ~~~~~~~~~~~~~~
 	ZERO	&ENDERECO_HARDWARE, 4			// Define endereco fisico da placa no no
-	LBCO	ENDERECO_HARDWARE, SHRAM_BASE, 26, 1
+	LBCO	ENDERECO_HARDWARE, SHRAM_BASE, 24, 1
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
