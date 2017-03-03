@@ -319,9 +319,11 @@ int init_start_PRU(int baudrate, char mode){
 
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
-	uint32_t timeout_instructions = 0;
-
-	timeout_instructions = (int) timeout_ms*66600;
+	uint32_t timeout_instructions;
+	float timeout_inst;
+	
+	timeout_inst = timeout_ms*66600;
+	timeout_instructions = (int)timeout_inst;
 
 
 	// ----- MASTER: Configuracao do Timeout
