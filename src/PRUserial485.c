@@ -12,6 +12,7 @@
 
 
 #define PRU_NUM         		1
+#define PRU_BINARY 			    "/usr/bin/PRUserial485.bin"
 #define OFFSET_SHRAM_WRITE		0x64		// 100 general purpose bytes
 #define OFFSET_SHRAM_READ		0x1800		//
 
@@ -161,6 +162,7 @@ void set_sync_start_PRU(uint32_t delay_us){
 void set_sync_stop_PRU(){
 	if(prudata[25]=='M')
 		prudata[5] = 0x00;
+		prussdrv_exec_program(PRU_NUM, PRU_BINARY);
 }
 
 
@@ -311,7 +313,7 @@ int init_start_PRU(int baudrate, char mode){
 
 
 	// ----- Executar codigo na PRU
-	prussdrv_exec_program (PRU_NUM, "/usr/bin/PRUserial485.bin");
+	prussdrv_exec_program (PRU_NUM, PRU_BINARY);
 
 	return 0;
 }
