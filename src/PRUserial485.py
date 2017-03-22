@@ -56,7 +56,7 @@ def PRUserial485_read():
         answer.append(chr(data_buffer[i]))
         i += 1
     # Resposta antiga no buffer (recv_ok = -1)
-    if(revc_ok):
+    if(recv_ok):
         return []
     else:
         return(answer)
