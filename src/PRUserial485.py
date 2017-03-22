@@ -49,13 +49,17 @@ def PRUserial485_write(request, reply_timeout):
 
 # Recebe dados através da interface serial.
 def PRUserial485_read():
-    libPRUserial485.recv_data_PRU(ctypes.byref(data_buffer), ctypes.byref(data_size))
+    recv_ok = libPRUserial485.recv_data_PRU(ctypes.byref(data_buffer), ctypes.byref(data_size))
     answer = []
     i = 0
     while (i < data_size.value):
         answer.append(chr(data_buffer[i]))
         i += 1
-    return(answer)
+    # Resposta antiga no buffer (recv_ok = -1)
+    if(revc_ok):
+        return []
+    else:
+        return(answer)
 
 
 # Inicia operação em modo síncrono
