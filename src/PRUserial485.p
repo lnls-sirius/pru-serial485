@@ -454,7 +454,6 @@ DATA_READY:
 
 PROCEDURE_START_SLAVE:
 	ZERO    &J, 4
-	MVID     J, PISCA_LED
 
 
 START_SLAVE:
@@ -486,28 +485,13 @@ START_SLAVE:
 
 // ~~~~~ Verifica recepcao de dados ~~~~~~~~
 WAIT_RECEIVED_SLAVE:
-	SUB	J, J, 1
+
 // ----- Verifica se há algo para enviar -----
 // Prontos para serem enviados: SHRAM[1] = 0xFF
 	LBCO	I, SHRAM_BASE, 1, 1			// 0xFF : Dados a enviar
 	QBEQ	SEND_DATA_SLAVE, I.b0, 0xff		// 0x55 : Nada a enviar
 // -------------------------------------------
 
-// ----- VERIFICA PISCA LED
-	QBNE	SEM_PISCAR, J, 0
-// ---- LED TOGGLE ABAIXO
-LED_ACENDE:
-	QBBS 	LED_APAGA, LED_IDLE
-	SET	LED_IDLE
-	MVID	J, PISCA_LED
-	JMP	SEM_PISCAR
-LED_APAGA:
-	CLR	LED_IDLE
-	MVID	J, PISCA_LED
-	JMP	SEM_PISCAR
-// --------------------------
-
-SEM_PISCAR:
 	QBBS	WAIT_RECEIVED_SLAVE, IRQ		// Data not received, loop continues
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -535,7 +519,7 @@ SEM_PISCAR:
 
 
 
-// Le RxLevel até ser >= 64 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
+// Le RxLevel até ser >= 16 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
 RXLEVEL_AND_TIMEOUT_SLAVE:
 
 	QBBC 	STORE_LEFTBYTES_SLAVE, IRQ		// RxTimeout Interrupt. Fim de mensagem
@@ -546,23 +530,23 @@ RXLEVEL_AND_TIMEOUT_SLAVE:
 	RECEIVE_SPI  8
 	CS_UP
 
-	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 6
-	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0	// Aguarda Buffer TX >= 0x0100 0000 = 64
+	LSR BUFFER_SPI_IN, BUFFER_SPI_IN, 4
+	QBEQ	RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0	// Aguarda Buffer TX >= 0x0001 0000 = 16
 
  
- // Armazena 64 bytes na SHRAM
-STORE_64BYTES_SLAVE:
+ // Armazena 16 bytes na SHRAM
+STORE_16BYTES_SLAVE:
 	ZERO	&J,4						// J: contador do loop
 	CS_DOWN
 	SEND_SPI 0x00,8						// Comando Read
 
-STORE_64_MEMORY_SLAVE:	
+STORE_16_MEMORY_SLAVE:	
 	ADD	I,I,1						// SHRAM[0x1800 + 4]
 	RECEIVE_SPI 8						// Recebe byte bloco
 	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1			// Armazena no byte I da shram
 	ADD		J,J,1											
 									
-	QBNE	STORE_64_MEMORY_SLAVE,J,0x40			// Se J == 64, termina loop
+	QBNE	STORE_16_MEMORY_SLAVE,J,0x10			// Se J == 16, termina loop
 	CS_UP
 	
 	JMP 	RXLEVEL_AND_TIMEOUT_SLAVE
@@ -582,13 +566,13 @@ STORE_LEFTBYTES_SLAVE:
 	CS_DOWN
 	SEND_SPI 0x00,8						// Comando Read
 
-STORE_LAST64_MEMORY_SLAVE:	
-	ADD		I,I,1					// SHRAM[0x1800 + 4]
+STORE_LAST16_MEMORY_SLAVE:	
+	ADD		I,I,1					    // Proximo endereco da SHRAM
 	RECEIVE_SPI 8						// Recebe byte bloco
 	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1			// Armazena no byte I da shram
 	SUB		J,J,1											
 									
-	QBNE	STORE_LAST64_MEMORY_SLAVE,J,0x00		// Se J == 0, termina loop
+	QBNE	STORE_LAST16_MEMORY_SLAVE,J,0x00		// Se J == 0, termina loop
 	CS_UP	
  
  
@@ -691,12 +675,6 @@ DATA_READY_SLAVE:
 	
     MOV     I, MENSAGEM_RECEBIDA_NOVA       // Confirma Dados Recebidos prudata[1]=0x00
 	SBCO	I, SHRAM_BASE, 1, 1	
-	
-
-	CS_DOWN
-	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
-	SEND_SPI 0x00, 8			// Desabilita interrupcoes
-	CS_UP
 
 	JMP		START_SLAVE
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
