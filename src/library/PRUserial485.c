@@ -119,7 +119,7 @@ int clear_pulse_count_sync(){
                 return 0;
         }
         else 
-                return 1;                               // Error: not possible to clear pulse counting
+                return -1;                               // Error: not possible to clear pulse counting
                                                         // while sync operation is enabled.
 }
 
