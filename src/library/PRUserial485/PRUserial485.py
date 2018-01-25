@@ -55,6 +55,7 @@ def PRUserial485_curve(curve1, curve2, curve3, curve4):
         return 0
     print("Erro: Curvas nao tem o mesmo tamanho.\n")
     return -1
+    
 # Ajusta ponteiro para proximo ponto a ser executado (curva)
 def PRUserial485_set_curve_pointer(next_point):
     libPRUserial485.set_curve_pointer(next_point)
