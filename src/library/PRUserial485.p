@@ -21,7 +21,11 @@
 #define LED_IDLE					r30.t10		// P8.28
 
 
-
+#define DDR_POINTER						r12
+#define DDR_BASE						r9
+#define CURVE						r11
+#define CURVE_SIZE					r8
+#define CHECKSUM_POINT						r10
 #define A							r16
 #define B							r17
 #define	K							r18
@@ -77,29 +81,31 @@
 
 
 START:	 
+
 // ----- Initial Configuration --------------------------------------------------------------------
 
 	CLR LED_READ
 	CLR LED_WRITE
 	CLR LED_IDLE
 
-// DELAY PISCA LED - IDLE
-	ZERO	&PISCA_LED, 4
-	ADD	PISCA_LED, PISCA_LED, 0x60
-	LSL	PISCA_LED, PISCA_LED, 8
-	ADD	PISCA_LED, PISCA_LED, 0xa0
-	LSL	PISCA_LED, PISCA_LED, 8
-
 
 // OFFSET_SHRAM_WRITE
 	ZERO	&OFFSET_SHRAM_WRITE, 4    
 	MOV		OFFSET_SHRAM_WRITE, 0x18
 	LSL		OFFSET_SHRAM_WRITE, OFFSET_SHRAM_WRITE, 8	// SHRAM_WRITE offset = 0x1800    
+
+// DDR_BASE e DDR_POINTER 
+	LBCO	DDR_BASE,SHRAM_BASE,15,4
+        ZERO    &DDR_POINTER, 4
+
+
  
 //  Shared Memory Config
 	SHRAM_CONFIG
 
 	RESET_UART
+
+
 			
 // Wait for UART to start
 	WBS		IRQ  
@@ -164,6 +170,10 @@ START:
 
 
 
+
+
+
+
 // ~~~~~ MASTER/SLAVE MODE ~~~~~~~~~~~~~~~~~
 	ZERO	&OPERATION_MODE, 4				// Verifica se opera em modo Master ou Slave
 	LBCO	OPERATION_MODE, SHRAM_BASE, 25, 1		// OPERATION_MODE <- shram[25] ('M' ou 'S') 
@@ -172,20 +182,22 @@ START:
 	QBEQ	PROCEDURE_START_SLAVE, OPERATION_MODE, 0x53 	// 0x53 = 'S'
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 	
- 
+
 
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 // :::::::::::::::::::::::::: MASTER MODE :::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 
+
 PROCEDURE_START_MASTER:
 
-	READ_ISR
-	READ_LSR	
+	NOP
 
 // ~~~~~ Verifica modo de operacao Master ~~
 OPERATION_MODE_MASTER:
+	READ_ISR
+	READ_LSR
 	ZERO	&I, 4
 	LBCO	I, SHRAM_BASE, 5, 1								// 0xFF : Modo Sincrono
 	QBNE	WAIT_FOR_DATA, I, 0xff 							// 0x00 : Modo Normal
@@ -196,36 +208,93 @@ OPERATION_MODE_MASTER:
 // ----- PROCEDIMENTO SINCRONO --------------------------------------------------------------------	
 //	Prepara comando de sincronismo
 	ZERO 	&BLOCKS, 4
-	LBCO	BLOCKS, SHRAM_BASE, OFFSET_SHRAM_SYNC, 1		// Tamanho do bloco
+	LBCO	BLOCKS, SHRAM_BASE, OFFSET_SHRAM_SYNC, 1	// Tamanho do comando
+
+	ZERO 	&I, 4
+	MOV	I,OFFSET_SHRAM_SYNC				// I: ponteiro para início dos dados - SHRAM[50]
+	ADD 	BLOCKS,BLOCKS,I					// Blocks: endereco do ultimo byte do comando
 	
-	MOV		I,OFFSET_SHRAM_SYNC				// I: ponteiro para início dos dados - SHRAM[50+1]
-	ADD 	BLOCKS,BLOCKS,I						// Blocks: endereco do ultimo byte
+//	Prepara tamanho da curva sincronismo
+	ZERO 	&CURVE_SIZE, 4
+	LBCO	CURVE_SIZE, SHRAM_BASE, 20, 4			// Tamanho de bytes da curva
+
+// 	Calcula checkcum inicial
+	ZERO 	&CHECKSUM_POINT, 4
+	ZERO	&A,4
+CS:	ADD	I,I,1
+	LBCO	A, SHRAM_BASE, I, 1
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,A
+	QBNE	CS,I,55						// Se I == ENDERECO DO ULTIMO CABECALHO, termina loop
+
+
+	READ_ISR
+	READ_LSR
+
 	
+
+
 	CS_DOWN
-	SEND_SPI 0x80,8							// Comando Envio (MAX3107)
+	SEND_SPI 0x80,8						// Comando Envio (MAX3107)
 
 
 // Wait for sync pulse: Apenas borda de subida
 	WBC SYNC
 	WBS SYNC
-	
+
+
+
+READ_DATA_POINTER:
+	LBCO	DDR_POINTER,SHRAM_BASE,10,4	
+
+	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4		
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b1
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b2
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b3
+	SBCO 	BUFFER_SPI_OUT,SHRAM_BASE,56,4					
+	ADD	DDR_POINTER,DDR_POINTER,4
+
+	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4		
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b1
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b2
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b3
+	SBCO 	BUFFER_SPI_OUT,SHRAM_BASE,60,4					
+	ADD	DDR_POINTER,DDR_POINTER,4
+
+	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4		
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b1
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b2
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b3
+	SBCO 	BUFFER_SPI_OUT,SHRAM_BASE,64,4					
+	ADD	DDR_POINTER,DDR_POINTER,4
+
+	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4		
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b1
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b2
+	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b3
+	SBCO 	BUFFER_SPI_OUT,SHRAM_BASE,68,4					
+	ADD	DDR_POINTER,DDR_POINTER,4
+
+	SBCO	CHECKSUM_POINT,SHRAM_BASE,72,1										
+
+
 //	Envia comando de sincronismo
+	ZERO 	&I, 4
+	MOV	I,OFFSET_SHRAM_SYNC				// I: ponteiro para início dos dados - SHRAM[50]				
+
 LOAD_FROM_MEMORY_SYNC:	
-		ADD		I,I,1
-		LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1		// Carrega byte da shram
-		SEND_SPI BUFFER_SPI_OUT,8				// Envia byte								
-	QBNE	LOAD_FROM_MEMORY_SYNC,I,BLOCKS				// Se I == NUMERO DE BLOCOS, termina loop
+	ADD	I,I,1
+	LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1		// Carrega byte da shram
+	SEND_SPI BUFFER_SPI_OUT,8				// Envia byte								
+	QBNE	LOAD_FROM_MEMORY_SYNC,I,BLOCKS			// Se I == NUMERO DE BYTES, termina loop
 	 
 	CS_UP
-	
-	
 
 
-UPDATE_PULSE_COUNTING:
-        ZERO    &I, 4
-        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 2   //Load current pulse count
-	ADD	I,I,1
-	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,2		// Store pulse count++	
+	
 
 // Le TX FIFO Level - Aguarda ate final do envio
 WAIT_TX_ZERO:
@@ -235,6 +304,25 @@ WAIT_TX_ZERO:
 	CS_UP
 
 	QBNE	WAIT_TX_ZERO, BUFFER_SPI_IN, 0	// Aguarda Buffer TX = 0
+
+// ---- Reseta ponteiro se está no final da curva
+	QBNE	UPDATE_PULSE_COUNTING,DDR_POINTER,CURVE_SIZE
+	ZERO	&DDR_POINTER,4
+	
+
+
+UPDATE_PULSE_COUNTING:
+        ZERO    &I, 4
+        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 4   //Load current pulse count
+	ADD	I,I,1
+	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,4		// Store pulse count++
+
+UPDATE_DATA_POINTER:
+	SBCO	DDR_POINTER,SHRAM_BASE,10,4
+
+// So envia requisicao normal se esta no final da curva (DDR_POINTER = 0). Se nao, volta a deteccao de pulso
+	QBNE	OPERATION_MODE_MASTER, DDR_POINTER, 0
+
 
 
 	
@@ -496,7 +584,7 @@ WAIT_RECEIVED_SLAVE:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-	SET LED_READ	
+//	SET LED_READ	
 
 // Habilita Interrupcao RxTimeout 
 	CS_DOWN
@@ -670,7 +758,7 @@ UPDATE_MSG_COUNTING:
 DATA_READY_SLAVE:
 
 
-	CLR	LED_READ
+//	CLR	LED_READ
 	
 	
     MOV     I, MENSAGEM_RECEBIDA_NOVA       // Confirma Dados Recebidos prudata[1]=0x00

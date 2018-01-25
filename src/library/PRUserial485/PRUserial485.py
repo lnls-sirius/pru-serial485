@@ -23,8 +23,16 @@ ctypes.CDLL("libprussdrvd.so", mode = ctypes.RTLD_GLOBAL)
 # Carrega a biblioteca libPRUserial485
 libPRUserial485 = ctypes.CDLL("libPRUserial485.so", mode = ctypes.RTLD_GLOBAL)
 
+
 # Buffer de 8 kB para o envio e recebimento de dados
 data_buffer = (ctypes.c_uint8 * 8192)()
+
+# Buffer para armazenamento dos pontos de curva
+C1_buffer = (ctypes.c_float * 8192)()
+C2_buffer = (ctypes.c_float * 8192)()
+C3_buffer = (ctypes.c_float * 8192)()
+C4_buffer = (ctypes.c_float * 8192)()
+
 
 # Variável que armazena o tamanho da última mensagem trocada (em bytes)
 data_size = ctypes.c_uint32(0)
@@ -33,6 +41,27 @@ data_size = ctypes.c_uint32(0)
 # Procedimento de inicialização da PRU
 def PRUserial485_open(baudrate, mode):
     libPRUserial485.init_start_PRU(baudrate, ctypes.c_char(mode))
+
+
+# Carregamento de curva
+def PRUserial485_curve(curve1, curve2, curve3, curve4):
+    if len(curve1) == len(curve2) == len(curve3) == len(curve4):
+        for i in range (0,len(curve1)):
+            C1_buffer[i] = curve1[i]
+            C2_buffer[i] = curve2[i]
+            C3_buffer[i] = curve3[i]
+            C4_buffer[i] = curve4[i]
+        libPRUserial485.loadCurve(ctypes.byref(C1_buffer), ctypes.byref(C2_buffer), ctypes.byref(C3_buffer), ctypes.byref(C4_buffer), len(curve1))
+        return 0
+    print("Erro: Curvas nao tem o mesmo tamanho.\n")
+    return -1
+# Ajusta ponteiro para proximo ponto a ser executado (curva)
+def PRUserial485_set_curve_pointer(next_point):
+    libPRUserial485.set_curve_pointer(next_point)
+
+# Leitura do ponteiro de curva (proximo ponto que sera executado)
+def PRUserial485_read_curve_pointer():
+    return(libPRUserial485.read_curve_pointer())
 
 
 # Envia dados através da interface serial
@@ -63,8 +92,8 @@ def PRUserial485_read():
 
 
 # Inicia operação em modo síncrono
-def PRUserial485_sync_start(delay):
-    libPRUserial485.set_sync_start_PRU(delay)
+def PRUserial485_sync_start(sync_address, delay):
+    libPRUserial485.set_sync_start_PRU(sync_address, delay)
 
 
 # Finaliza a operação em modo síncrono

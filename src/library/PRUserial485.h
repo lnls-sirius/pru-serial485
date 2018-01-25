@@ -12,6 +12,46 @@ extern "C" {
 #endif
 
 
+
+
+/* CARREGAMENTO DOS PONTOS DA CURVA
+ *
+ * SOMENTE MODO MASTER
+ * --Parametro--
+ * curveX: vetor dos pontos da curva, correnspondente a cada fonte FBP do bastidor, em ponto flutuante
+ * CurvePoints: numero de pontos da curva. Todas as curvas devem ter o MESMO tamanho.
+ *
+*/
+int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint16_t CurvePoints);
+
+
+
+
+
+/* PROCEDIMENTO SINCRONO - ESCOLHA DO PROXIMO PONTO A SER EXECUTADO
+ *
+ * SOMENTE MODO MASTER
+ * --Parametro--
+ * new_pointer: ponto de onde a curva sera executada a partir do proximo pulso de sincronismo. Parametro incrementado
+ * automaticamente apos cada pulso.
+*/
+void set_curve_pointer(uint32_t new_pointer);
+
+
+
+
+/* PROCEDIMENTO SINCRONO - ESCOLHA DO PROXIMO PONTO A SER EXECUTADO
+ *
+* --Retorno--
+ * MODO MASTER:
+ * A funcao retorna o indice do proximo ponto que sera executado, apos o pulso de sincronismo.
+ *
+*/
+uint32_t read_curve_pointer();
+
+
+
+
 /* INICIALIZACAO DA PRU
  * --Parametros--
  * baudrate: velocidade de comunicacao RS485
@@ -82,10 +122,11 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
  * SOMENTE MODO MASTER
  * --Parametro--
  * delay_us: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
+ * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva)
  *
  * Sinaliza o inicio do procedimento sincrono via PRU
 */
-void set_sync_start_PRU(uint32_t delay_us);
+void set_sync_start_PRU(uint8_t sync_address, uint32_t delay_us);
 
 
 
@@ -128,7 +169,7 @@ int clear_pulse_count_sync();
  * Valor do contador de pulsos
  * (Contagem de pulsos físicos no modo MASTER --- Contagem de mensagem de passo sync no modo SLAVE)
 */
-uint16_t read_pulse_count_sync();
+uint32_t read_pulse_count_sync();
 
 
 
