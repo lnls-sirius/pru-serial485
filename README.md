@@ -4,8 +4,6 @@
 
 - Run the script `library_build.sh`
 
-____
-____
 
 It is not needed to copy any library files to your project.
 
