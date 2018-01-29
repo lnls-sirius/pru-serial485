@@ -30,7 +30,7 @@ echo "."
 echo ".."
 echo "..."
 echo "Building and installing Python library..."
-python setup.py install
+./setup.py install
 echo "OK"
 
 echo "."

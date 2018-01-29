@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python-sirius
 
 """
 setup.py file for PRUserial485
