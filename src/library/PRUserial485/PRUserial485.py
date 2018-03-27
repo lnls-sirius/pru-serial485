@@ -29,10 +29,10 @@ libPRUserial485 = ctypes.CDLL("libPRUserial485.so", mode=ctypes.RTLD_GLOBAL)
 data_buffer = (ctypes.c_uint8 * 8192)()
 
 # Buffer para armazenamento dos pontos de curva
-C1_buffer = (ctypes.c_float * 8192)()
-C2_buffer = (ctypes.c_float * 8192)()
-C3_buffer = (ctypes.c_float * 8192)()
-C4_buffer = (ctypes.c_float * 8192)()
+C1_buffer = (ctypes.c_float * 262144)()
+C2_buffer = (ctypes.c_float * 262144)()
+C3_buffer = (ctypes.c_float * 262144)()
+C4_buffer = (ctypes.c_float * 262144)()
 
 
 # Variável que armazena o tamanho da última mensagem trocada (em bytes)
@@ -100,14 +100,22 @@ def PRUserial485_read():
         return(answer)
 
 
-def PRUserial485_sync_start(sync_address, delay):
+def PRUserial485_sync_start(sync_mode, delay, sync_address = 0x00):
     """Inicia operação em modo síncrono."""
-    libPRUserial485.set_sync_start_PRU(sync_address, delay)
+    libPRUserial485.set_sync_start_PRU(sync_mode, delay, sync_address)
 
 
 def PRUserial485_sync_stop():
     """Finaliza a operação em modo síncrono."""
     libPRUserial485.set_sync_stop_PRU()
+
+
+def PRUserial485_sync_status():
+	"""Verifica se sincronismo via PRU está aguardando pulso"""
+    if(libPRUserial485.sync_status()):
+        return ("True")
+    else:
+        return ("False")
 
 
 def PRUserial485_clear_pulse_count_sync():

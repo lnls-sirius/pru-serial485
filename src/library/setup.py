@@ -1,4 +1,4 @@
-#!/usr/bin/env python-sirius
+#!/usr/bin/env python
 
 """
 setup.py file for PRUserial485
@@ -13,7 +13,7 @@ dist = setup (name = 'PRUserial485',
               description = """Interface Serial de Alta Performance/Velocidade""",
               author      = "Patricia Nallin",
               author_email= "patricia.nallin@lnls.br",
-              url         = "https://git.cnpem.br/patricia.nallin/PRUserial485.git",
+              url         = "https://github.com/lnls-sirius/pru-serial485.git",
               packages    = ["PRUserial485"],
               license     = "BSD",
               platforms   = ["Debian Beaglebone"],

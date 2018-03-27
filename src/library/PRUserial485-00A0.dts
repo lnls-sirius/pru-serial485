@@ -23,7 +23,7 @@
 		        "P8.41","pr1_pru1_pru_r30_4", // MOSI
 
 		// PRU Output LEDS
-				"P8.28","pr1_pru1_pru_r30_10",// LED ALIVE
+				//"P8.28","pr1_pru1_pru_r30_10",// LED ALIVE
 				"P8.29","pr1_pru1_pru_r30_9", // LED WRITE
 				"P8.40","pr1_pru1_pru_r30_7"; // LED READ
 
@@ -47,7 +47,7 @@
                     0x0a8 0x0D
                     0x0b0 0x0D
 
-					0x0e8 0x0D
+				//	0x0e8 0x0D
 					0x0e4 0x0D
 					0x0bc 0x0D
                 >;

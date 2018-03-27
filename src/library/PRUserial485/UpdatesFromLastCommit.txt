@@ -1,0 +1,13 @@
+- Function "PRUserial485_sync_start":
+PRUserial485_sync_start(sync_address, delay) to PRUserial485_sync_start(sync_mode, delay, sync_address = 0x00)
+
+# Sync_Mode 	| 0x51 - Single curve sequence & Intercalated read messages
+#		| 0x5E - Single curve sequence & Read messages at End of curve
+#		| 0xC1 - Continuous curve sequence & Intercalated read messages
+#		| 0xCE - Continuous curve sequence & Read messages at End of curve
+#               | 0x5C - Single Sequence - Single CYCLING COMMAND
+
+
+
+- Function "PRUserial485_sync_status"
+NEW ONE!

@@ -22,10 +22,17 @@ extern "C" {
  * CurvePoints: numero de pontos da curva. Todas as curvas devem ter o MESMO tamanho.
  *
 */
-int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint16_t CurvePoints);
+int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints);
 
-
-
+/* PROCEDIMENTO SINCRONO - STATUS DE PRONTO
+ *
+* --Retorno--
+ * MODO MASTER:
+ * 1: pronto
+ * 0: desarmado
+ *
+*/
+int sync_status();
 
 
 /* PROCEDIMENTO SINCRONO - ESCOLHA DO PROXIMO PONTO A SER EXECUTADO
@@ -121,12 +128,17 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
  *
  * SOMENTE MODO MASTER
  * --Parametro--
- * delay_us: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
- * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva)
- *
+ * PROCEDIMENTO SINCRONO - START
+ * Sync_Mode 	| 0x51 - Single curve sequence & Intercalated read messages
+ *				| 0x5E - Single curve sequence & Read messages at End of curve
+ *				| 0xC1 - Continuous curve sequence & Intercalated read messages
+ *				| 0xCE - Continuous curve sequence & Read messages at End of curve
+ *               | 0x5C - Single Sequence - Single CYCLING COMMAND
+ * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
+ * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5C
  * Sinaliza o inicio do procedimento sincrono via PRU
 */
-void set_sync_start_PRU(uint8_t sync_address, uint32_t delay_us);
+void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address);
 
 
 
@@ -150,20 +162,20 @@ uint8_t hardware_address_serialPRU();
 
 
 /* ZERA CONTADOR DE PULSOS - SINCRONISMO
- * 
+ *
  *
  * Se o sincronismo estiver desabilitado, zera contador de pulsos
  *
  * --Retorno--
  * 0:  	apos zerar contador
- * 1: Caso o modo sincrono esteja habilitado no modo master	
+ * -1: Caso o modo sincrono esteja habilitado no modo master
 */
 int clear_pulse_count_sync();
 
 
 
 /* LEITURA CONTADOR DE PULSOS - SINCRONISMO
- * 
+ *
  *
  * --Retorno--
  * Valor do contador de pulsos
