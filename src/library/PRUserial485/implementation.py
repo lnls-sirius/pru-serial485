@@ -100,7 +100,7 @@ def PRUserial485_read():
         return(answer)
 
 
-def PRUserial485_sync_start(sync_mode, delay, sync_address = 0x00):
+def PRUserial485_sync_start(sync_mode, delay, sync_address=0x00):
     """Inicia operação em modo síncrono."""
     libPRUserial485.set_sync_start_PRU(sync_mode, delay, sync_address)
 
@@ -111,11 +111,11 @@ def PRUserial485_sync_stop():
 
 
 def PRUserial485_sync_status():
-	"""Verifica se sincronismo via PRU está aguardando pulso"""
-    if(libPRUserial485.sync_status()):
-        return ("True")
+    """Verifica se sincronismo via PRU está aguardando pulso."""
+    if libPRUserial485.sync_status():
+        return True
     else:
-        return ("False")
+        return False
 
 
 def PRUserial485_clear_pulse_count_sync():
