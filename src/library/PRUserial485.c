@@ -1,3 +1,19 @@
+/*
+PRUserial485.c
+
+
+--------------------------------------------------------------------------------
+RS-485 communication via PRU
+--------------------------------------------------------------------------------
+Interfaces with SERIALxxCON Hardware (v2-3)
+
+Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
+Controls Group
+
+Author: Patricia HENRIQUES NALLIN
+Date: April/2018
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -35,6 +51,9 @@
 
 #define MMAP0_LOC   "/sys/class/uio/uio0/maps/map0/"
 #define MMAP1_LOC   "/sys/class/uio/uio0/maps/map1/"
+
+#define CURVE_BYTES_PER_BLOCK		100000
+#define CURVE_MAX_POINTS_PER_BLOCK	CURVE_BYTES_PER_BLOCK/16
 
 #define MAP_SIZE 0x0FFFFFFF
 #define MAP_MASK (MAP_SIZE)
@@ -261,7 +280,7 @@ void close_PRU(){
 
 
 
-int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints){
+int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints, uint8_t block){
 
 	// ----- DDR address
 	unsigned int DDR_address[2];
@@ -293,6 +312,8 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
 	uint32_t value1, value2, value3, value4 = 0;
 	float read1, read2, read3, read4 = 0;
 	int i;
+
+	target += block * (CURVE_BYTES_PER_BLOCK);
 
 	for(i=0; i<CurvePoints; i++){
 
@@ -391,22 +412,22 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
 
 	}
 
-	// Tamanho em bytes da curva
-	prudata[20] = (16*CurvePoints);			// LSByte do tamanho curva [7..0]
-	prudata[21] = (16*CurvePoints) >> 8;		// Byte do tamanho curva [15..8]
-	prudata[22] = (16*CurvePoints) >> 16;		// Byte do tamanho curva [23..16]
-	prudata[23] = (16*CurvePoints) >> 24;		// MSByte do tamanho curva [31..24]
+	if (((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
+		// Tamanho em bytes
+		prudata[20] = (16*CurvePoints);			// LSByte do tamanho curva [7..0]
+		prudata[21] = (16*CurvePoints) >> 8;		// Byte do tamanho curva [15..8]
+		prudata[22] = (16*CurvePoints) >> 16;		// Byte do tamanho curva [23..16]
+		prudata[23] = (16*CurvePoints) >> 24;		// MSByte do tamanho curva [31..24]
 
-	while(((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
+		while(((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
+		}
 	}
 
-	set_curve_pointer(0x00);
+    if(munmap(map_base, MAP_SIZE) == -1) {
+    	printf("Failed to unmap memory");
+       	return -1;
+    }
 
-
-    	if(munmap(map_base, MAP_SIZE) == -1) {
-       		printf("Failed to unmap memory");
-       		return -1;
-    	}
 	close(fd);
 
 	printf("%d-point curve successfully loaded.\n", CurvePoints);
@@ -415,6 +436,41 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
 }
 
 
+void set_curve_block(uint8_t block){
+	unsigned int DDR_address[2];
+
+   	FILE* fp;
+   	fp = fopen(MMAP1_LOC "addr", "rt");
+   	fscanf(fp, "%x", &DDR_address[0]);
+   	fclose(fp);
+
+	DDR_address[0] += block * (CURVE_BYTES_PER_BLOCK);
+
+	// Endereco do bloco na DDR
+	prudata[15] = (DDR_address[0]) >> 0;		// LSByte [7..0]
+	prudata[16] = (DDR_address[0]) >> 8;		// Byte [15..8]
+	prudata[17] = (DDR_address[0]) >> 16;		// Byte [23..16]
+	prudata[18] = (DDR_address[0]) >> 24;		// MSByte [31..24]
+
+
+}
+
+
+uint8_t read_curve_block(){
+	unsigned int DDR_address[2], address;
+	uint8_t block = 0;
+
+   	FILE* fp;
+   	fp = fopen(MMAP1_LOC "addr", "rt");
+   	fscanf(fp, "%x", &DDR_address[0]);
+   	fclose(fp);
+
+	// Endereco do bloco na DDR
+	address = (prudata[18] << 24) + (prudata[17] << 16) +(prudata[16] << 8) +(prudata[15] << 0);
+	block = (address - DDR_address[0])/CURVE_BYTES_PER_BLOCK;
+
+	return block;
+}
 
 int init_start_PRU(int baudrate, char mode){
 
@@ -544,11 +600,7 @@ int init_start_PRU(int baudrate, char mode){
 	prudata[27] = one_byte_length_ns >> 8;
 	prudata[28] = one_byte_length_ns >>16;
 
-
-
-
-
-// ----- DDR address
+	// ----- DDR address
 	unsigned int DDR_address[2];
 
    	FILE* fp;
@@ -578,7 +630,6 @@ int init_start_PRU(int baudrate, char mode){
 
 	return 0;
 }
-
 
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 

@@ -1,13 +1,11 @@
-- Function "PRUserial485_sync_start":
-PRUserial485_sync_start(sync_address, delay) to PRUserial485_sync_start(sync_mode, delay, sync_address = 0x00)
-
-# Sync_Mode 	| 0x51 - Single curve sequence & Intercalated read messages
-#		| 0x5E - Single curve sequence & Read messages at End of curve
-#		| 0xC1 - Continuous curve sequence & Intercalated read messages
-#		| 0xCE - Continuous curve sequence & Read messages at End of curve
-#               | 0x5C - Single Sequence - Single CYCLING COMMAND
+- Function "PRUserial485_curve":
+New argument: it is needed to set the correspondent curve block where the points will be stored
 
 
+- NEW FUNCTION: PRUserial485_set_curve_block(block):
+Selects which block will be performed.
 
-- Function "PRUserial485_sync_status"
-NEW ONE!
+
+- NEW FUNCTION: PRUserial485_read_curve_block():
+Gets which block is going to be performed.
+

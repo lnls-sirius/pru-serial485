@@ -44,7 +44,7 @@ def PRUserial485_open(baudrate, mode):
     libPRUserial485.init_start_PRU(baudrate, ctypes.c_char(mode))
 
 
-def PRUserial485_curve(curve1, curve2, curve3, curve4):
+def PRUserial485_curve(curve1, curve2, curve3, curve4, block):
     """Carregamento de curva."""
     if len(curve1) == len(curve2) == len(curve3) == len(curve4):
         for i in range(0, len(curve1)):
@@ -55,9 +55,20 @@ def PRUserial485_curve(curve1, curve2, curve3, curve4):
         libPRUserial485.loadCurve(ctypes.byref(C1_buffer),
                                   ctypes.byref(C2_buffer),
                                   ctypes.byref(C3_buffer),
-                                  ctypes.byref(C4_buffer), len(curve1))
+                                  ctypes.byref(C4_buffer),
+								  len(curve1), block)
     else:
         raise ValueError("Erro: Curvas nao tem o mesmo tamanho!")
+
+
+def PRUserial485_set_curve_block(block):
+	"""Selecao de bloco de curva a ser realizado."""
+    libPRUserial485.set_curve_block(block)
+
+
+def PRUserial485_read_curve_block():
+	"""Leitura do bloco de curva que sera realizado."""
+    return(libPRUserial485.read_curve_block())
 
 
 def PRUserial485_set_curve_pointer(next_point):

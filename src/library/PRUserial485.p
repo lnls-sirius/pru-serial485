@@ -1,3 +1,5 @@
+// ----- PRUserial485 -----
+
 #define OWN_RAM              		0x000
 #define OTHER_RAM           		0x020
 #define SHARED_RAM          	 	0x100
@@ -206,11 +208,12 @@ START:
 PROCEDURE_START_MASTER:
 
 	NOP
+	LBCO    DDR_BASE,SHRAM_BASE,15,4 //Teste
 
 // ~~~~~ Verifica modo de operacao Master ~~
 OPERATION_MODE_MASTER:
-	READ_ISR
-	READ_LSR
+	//READ_ISR
+	//READ_LSR
 
   // Says it is not waiting for sync
   ZERO 	&I, 4
@@ -276,9 +279,10 @@ WAIT_SYNC:
 
 
 // Wait for sync pulse: Apenas borda de subida
+	CLR LED_READ
 	WBC SYNC
 	WBS SYNC
-
+	SET LED_READ
 
 // VERIFICA SE CICLAGEM - Se sim, pula para "SEND_SYNC"
 	ZERO    &I, 4
@@ -296,7 +300,10 @@ WAIT_SYNC:
 
 
 READ_DATA_POINTER:
+	// DDR_BASE e DDR_POINTER
 	LBCO	DDR_POINTER,SHRAM_BASE,10,4
+//	LBCO	DDR_BASE,SHRAM_BASE,15,4
+
 
 	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4
 	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
@@ -369,6 +376,7 @@ WAIT_TX_ZERO:
 // ---- Reseta ponteiro se está no final da curva
 	QBNE	UPDATE_DATA_POINTER,DDR_POINTER,CURVE_SIZE
 	ZERO	&DDR_POINTER,4
+	LBCO    DDR_BASE,SHRAM_BASE,15,4 // Teste
 
 
 UPDATE_DATA_POINTER:

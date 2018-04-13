@@ -1,3 +1,19 @@
+/*
+PRUserial485.c
+
+
+--------------------------------------------------------------------------------
+RS-485 communication via PRU
+--------------------------------------------------------------------------------
+Interfaces with SERIALxxCON Hardware (v2-3)
+
+Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
+Controls Group
+
+Author: Patricia HENRIQUES NALLIN
+Date: April/2018
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -14,15 +30,36 @@ extern "C" {
 
 
 
-/* CARREGAMENTO DOS PONTOS DA CURVA
+/* PROCEDIMENTO SINCRONO - CARREGAMENTO DOS PONTOS DA CURVA
  *
  * SOMENTE MODO MASTER
  * --Parametro--
  * curveX: vetor dos pontos da curva, correnspondente a cada fonte FBP do bastidor, em ponto flutuante
  * CurvePoints: numero de pontos da curva. Todas as curvas devem ter o MESMO tamanho.
+ * blocks: numero do bloco no qual a curva sera escrita.
  *
 */
-int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints);
+int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints, uint8_t block);
+
+/* PROCEDIMENTO SINCRONO - SELECAO DE BLOCO DE CURVAS
+ *
+ * SOMENTE MODO MASTER
+ * --Parametro--
+ * block: Numero do bloco a ser executado a partir do proximo ciclo. Inicializacao no bloco 0.
+ *
+*/
+void set_curve_block(uint8_t block);
+
+
+/* PROCEDIMENTO SINCRONO - LEITURA DO BLOCO DE CURVAS
+ *
+* --Retorno--
+ * MODO MASTER:
+ * Numero do bloco que sera executado no proximo ciclo
+ *
+*/
+uint8_t read_curve_block();
+
 
 /* PROCEDIMENTO SINCRONO - STATUS DE PRONTO
  *
