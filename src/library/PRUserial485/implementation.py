@@ -56,18 +56,18 @@ def PRUserial485_curve(curve1, curve2, curve3, curve4, block):
                                   ctypes.byref(C2_buffer),
                                   ctypes.byref(C3_buffer),
                                   ctypes.byref(C4_buffer),
-								  len(curve1), block)
+				  len(curve1), block)
     else:
         raise ValueError("Erro: Curvas nao tem o mesmo tamanho!")
 
 
 def PRUserial485_set_curve_block(block):
-	"""Selecao de bloco de curva a ser realizado."""
+    """Selecao de bloco de curva a ser realizado."""
     libPRUserial485.set_curve_block(block)
 
 
 def PRUserial485_read_curve_block():
-	"""Leitura do bloco de curva que sera realizado."""
+    """Leitura do bloco de curva que sera realizado."""
     return(libPRUserial485.read_curve_block())
 
 
