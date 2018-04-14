@@ -56,7 +56,7 @@ def PRUserial485_curve(curve1, curve2, curve3, curve4, block):
                                   ctypes.byref(C2_buffer),
                                   ctypes.byref(C3_buffer),
                                   ctypes.byref(C4_buffer),
-				  len(curve1), block)
+                                  len(curve1), block)
     else:
         raise ValueError("Erro: Curvas nao tem o mesmo tamanho!")
 
