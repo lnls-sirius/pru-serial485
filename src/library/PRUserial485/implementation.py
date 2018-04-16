@@ -16,14 +16,18 @@ else:
     # Este arquivo é um módulo Python, e não deve ser executado
     exit()
 
-# Carrega as bibliotecas dinâmicas das quais a biblioteca libPRUserial485
-# depende (bibliotecas da PRU)
-ctypes.CDLL("libprussdrv.so", mode=ctypes.RTLD_GLOBAL)
-ctypes.CDLL("libprussdrvd.so", mode=ctypes.RTLD_GLOBAL)
-
-# Carrega a biblioteca libPRUserial485
-libPRUserial485 = ctypes.CDLL("libPRUserial485.so", mode=ctypes.RTLD_GLOBAL)
-
+# Carrega bibliotecas
+try:
+    # Carrega as bibliotecas dinâmicas das quais a biblioteca libPRUserial485
+    # depende (bibliotecas da PRU)
+    ctypes.CDLL("libprussdrv.so", mode=ctypes.RTLD_GLOBAL)
+    ctypes.CDLL("libprussdrvd.so", mode=ctypes.RTLD_GLOBAL)
+    # Carrega a biblioteca libPRUserial485
+    libPRUserial485 = ctypes.CDLL(
+        "libPRUserial485.so", mode=ctypes.RTLD_GLOBAL)
+    libraries_loaded = True
+except OSError:
+    libraries_loaded = False
 
 # Buffer de 8 kB para o envio e recebimento de dados
 data_buffer = (ctypes.c_uint8 * 8192)()
@@ -56,7 +60,7 @@ def PRUserial485_curve(curve1, curve2, curve3, curve4, block):
                                   ctypes.byref(C2_buffer),
                                   ctypes.byref(C3_buffer),
                                   ctypes.byref(C4_buffer),
-				  len(curve1), block)
+                                  len(curve1), block)
     else:
         raise ValueError("Erro: Curvas nao tem o mesmo tamanho!")
 
