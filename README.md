@@ -3,8 +3,7 @@ _PRU-based high performance serial communication_
 
 
 
-_Author:_
-
+_Author:_  
 Patricia H. Nallin ( _patricia.nallin@lnls.br_ )
 
 _____
