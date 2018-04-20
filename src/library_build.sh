@@ -34,7 +34,11 @@ echo "."
 echo ".."
 echo "..."
 echo "Building and installing Python library..."
-./setup.py install
+if [ -z "$1" ]; then
+  ./setup.py install
+else
+  ./setup.py $1
+fi
 echo "OK"
 
 echo "."
