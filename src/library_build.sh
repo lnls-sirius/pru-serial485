@@ -1,12 +1,16 @@
 #!/usr/bin/env sh
 cd library
 
-echo "."
-echo ".."
-echo "..."
-echo "Building Device Tree Overlay..."
-./overlay_build.sh
-echo "OK"
+
+KERNEL_VERSION=`uname -r`;
+if [ "${KERNEL_VERSION%.*}" = "3.8" ]; then
+    echo "."
+    echo ".."
+    echo "..."
+    echo "Building Device Tree Overlay..."
+    ./overlay_build.sh
+    echo "OK"
+fi
 
 echo "."
 echo ".."
@@ -30,7 +34,11 @@ echo "."
 echo ".."
 echo "..."
 echo "Building and installing Python library..."
-./setup.py install
+if [ -z "$1" ]; then
+  ./setup.py install
+else
+  ./setup.py $1
+fi
 echo "OK"
 
 echo "."
