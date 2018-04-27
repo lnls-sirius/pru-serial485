@@ -113,7 +113,7 @@ _**Curves**_
 
 - ```PRUserial485_set_curve_pointer(int next_point)```
 
-   Selection of next point of curve that will be performed   
+   Selection of point of curve that will be performed after the next sync pulse   
 
    _*Parameters*_
   * _next_point:_  

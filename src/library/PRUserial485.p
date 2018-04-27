@@ -183,10 +183,16 @@ START:
 
 
 
+// ~~~~~ BASE PARA CURVA ~~~~~~~~~~~~~~~~~~~
+	LBCO    DDR_BASE,SHRAM_BASE,15,4
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-
-
+// ~~~~~ Not waiting for sync ~~~~~~~~~~~~~~
+  ZERO 	&I, 4
+  ADD I, I, SYNC_NOK
+  SBCO 	I,SHRAM_BASE,OFFSET_SHRAM_SYNC_OK,1
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 // ~~~~~ MASTER/SLAVE MODE ~~~~~~~~~~~~~~~~~
@@ -208,17 +214,9 @@ START:
 PROCEDURE_START_MASTER:
 
 	NOP
-	LBCO    DDR_BASE,SHRAM_BASE,15,4 //Teste
 
 // ~~~~~ Verifica modo de operacao Master ~~
 OPERATION_MODE_MASTER:
-	//READ_ISR
-	//READ_LSR
-
-  // Says it is not waiting for sync
-  ZERO 	&I, 4
-  ADD I, I, SYNC_NOK
-  SBCO 	I,SHRAM_BASE,OFFSET_SHRAM_SYNC_OK,1
 
 	ZERO	&I, 4
 	LBCO	I, SHRAM_BASE, 5, 1								// 0xFF : Modo Sincrono
@@ -246,7 +244,6 @@ OPERATION_MODE_MASTER:
 
 
 
-
 //	Prepara tamanho da curva sincronismo
 	ZERO 	&CURVE_SIZE, 4
 	LBCO	CURVE_SIZE, SHRAM_BASE, 20, 4			// Tamanho de bytes da curva
@@ -261,7 +258,6 @@ CS:	ADD	I,I,1
 	LBCO	A, SHRAM_BASE, I, 1
 	SUB	CHECKSUM_POINT,CHECKSUM_POINT,A
 	QBNE	CS,I,55						// Se I == ENDERECO DO ULTIMO CABECALHO, termina loop
-
 
 
 WAIT_SYNC:
@@ -293,18 +289,15 @@ WAIT_SYNC:
 
 
 
-// Says it is not waiting for sync
-  ZERO 	&I, 4
-  ADD I, I, SYNC_NOK
-  SBCO 	I,SHRAM_BASE,OFFSET_SHRAM_SYNC_OK,1
-
-
 READ_DATA_POINTER:
 	// DDR_BASE e DDR_POINTER
 	LBCO	DDR_POINTER,SHRAM_BASE,10,4
-//	LBCO	DDR_BASE,SHRAM_BASE,15,4
+	// Verifica se esta no inicio da curva. Se SIM, seleciona bloco
+	ZERO	&I, 4
+	QBNE	POINTS_CURVE, DDR_POINTER, I
+	LBCO	DDR_BASE,SHRAM_BASE,15,4
 
-
+POINTS_CURVE:
 	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4
 	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
 	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b1
@@ -362,7 +355,7 @@ WAIT_TX_ZERO:
 	RECEIVE_SPI  8
 	CS_UP
 
-	QBNE	WAIT_TX_ZERO, BUFFER_SPI_IN, 0	// Aguarda Buffer TX = 0
+	QBGT	WAIT_TX_ZERO, BUFFER_SPI_IN, 0x08	// Aguarda Buffer TX < 8
 
 // VERIFICA SE CICLAGEM - Se sim, pula para "UPDATE_PULSE_COUNTING"
 	ZERO    &I, 4
@@ -376,7 +369,6 @@ WAIT_TX_ZERO:
 // ---- Reseta ponteiro se está no final da curva
 	QBNE	UPDATE_DATA_POINTER,DDR_POINTER,CURVE_SIZE
 	ZERO	&DDR_POINTER,4
-	LBCO    DDR_BASE,SHRAM_BASE,15,4 // Teste
 
 
 UPDATE_DATA_POINTER:
@@ -384,7 +376,7 @@ UPDATE_DATA_POINTER:
 
 UPDATE_PULSE_COUNTING:
         ZERO    &I, 4
-        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT, 4   //Load current pulse count
+        LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,4   //Load current pulse count
 	ADD	I,I,1
 	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_SYNC_COUNT,4		// Store pulse count++
 
@@ -402,7 +394,8 @@ UPDATE_PULSE_COUNTING:
 
 // VERIFICACAO DE MODO SINCRONO
 // Verifica se esta no final ou no meio da curva
-  QBEQ	END_OF_CURVE, DDR_POINTER, 0
+  ZERO    &I, 4 // I = 0
+  QBEQ	END_OF_CURVE, DDR_POINTER, I
   JMP   MIDDLE_CURVE
 
 
