@@ -58,10 +58,10 @@ Date: April/2018
 
 /* Return codes */
 
-#define OK 0
-#define ERR_CLEAR_PULSE 1
 #define SYNC_OFF 0
 #define SYNC_ON 1
+#define OK 0
+#define ERR_CLEAR_PULSE 1
 #define ERR_LD_CURVE_MOPEN 2
 #define ERR_LD_CURVE_MMAP 3
 #define ERR_LD_CURVE_UMMAP 4
