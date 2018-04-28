@@ -56,6 +56,20 @@ Date: April/2018
 #define MAP_SIZE 0x0FFFFFFF
 #define MAP_MASK (MAP_SIZE)
 
+/* Return codes */
+
+#define OK 0
+#define ERR_CLEAR_PULSE 1
+#define SYNC_OFF 0
+#define SYNC_ON 1
+#define ERR_LD_CURVE_MOPEN 2
+#define ERR_LD_CURVE_MMAP 3
+#define ERR_LD_CURVE_UMMAP 4
+#define ERR_INIT_PRU_SSDRV 5
+#define ERR_INIT_PRU_MODE 6
+#define ERR_INIT_PRU_BAUDR 7
+#define ERR_RECV_DATA_OLDMSG 8
+
 
 
 /* PRU SHARED MEMORY (12kB) - MAPPING
@@ -154,11 +168,11 @@ int clear_pulse_count_sync(){
     prudata[81] = 0;
     prudata[82] = 0;
     prudata[83] = 0;
-    return 0;
+    return OK;
   }
   else
-    return -1;        // Error: not possible to clear pulse counting
-                      // while sync operation is enabled.
+    return ERR_CLEAR_PULSE;  // Error: not possible to clear pulse counting
+                             // while sync operation is enabled.
 }
 
 
@@ -194,11 +208,11 @@ uint32_t read_curve_pointer(){
 int sync_status(){
   // Sync trigger not waiting
   if(prudata[84] == 0x00){
-    return 0;
+    return SYNC_OFF;
   }
   // Sync trigger waiting
   if(prudata[84] == 0xff){
-    return 1;
+    return SYNC_ON;
   }
 }
 
@@ -302,13 +316,13 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
 
   if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
     // printf("Failed to open memory!");
-    return -1;
+    return ERR_LD_CURVE_MOPEN;
   }
 
   map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
   if(map_base == (void *) -1) {
     // printf("Failed to map base address");
-    return -2;
+    return ERR_LD_CURVE_MMAP;
   }
 
   uint32_t value1, value2, value3, value4 = 0;
@@ -427,7 +441,7 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
 
     if(munmap(map_base, MAP_SIZE) == -1) {
       // printf("Failed to unmap memory");
-      return -3;
+      return ERR_LD_CURVE_UMMAP;
     }
 
   close(fd);
@@ -488,7 +502,7 @@ int init_start_PRU(int baudrate, char mode){
   // ----- Inicializacao da interrupcao PRU
   if (prussdrv_open(PRU_EVTOUT_1)){
     // printf("prussdrv_open open failed\n");
-    return -1;
+    return ERR_INIT_PRU_SSDRV;
   }
   prussdrv_pruintc_init(&pruss_intc_initdata);
 
@@ -509,7 +523,7 @@ int init_start_PRU(int baudrate, char mode){
     // Modo nao existente
     close_PRU();
     // printf("Requested mode does not exist.\n");
-    return -2;
+    return ERR_INIT_PRU_MODE;
   }
 
   // ----- Inicializacao: contador de sincronismo zerado
@@ -598,7 +612,7 @@ int init_start_PRU(int baudrate, char mode){
     default:
       close_PRU();    // Nao definido
       // printf("Baudrate not defined.\n");
-      return -3;
+      return ERR_INIT_PRU_BAUDR;
   }
   prudata[26] = one_byte_length_ns;
   prudata[27] = one_byte_length_ns >> 8;
@@ -724,6 +738,6 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
 
     // ----- Mensagem antiga no buffer
     if(prudata[1] == MENSAGEM_ANTIGA)
-      return -1;
+      return ERR_RECV_DATA_OLDMSG;
   }
 }

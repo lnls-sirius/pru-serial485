@@ -45,17 +45,18 @@ data_size = ctypes.c_uint32(0)
 
 class ConstReturn:
     """Namespace for return constants."""
+
     OK = 0
-    ERR_CLEAR_PULSE = -1  # clear_pulse_count_sync
+    ERR_CLEAR_PULSE = 1  # clear_pulse_count_sync
     SYNC_OFF = 0  # sync_status
     SYNC_ON = 1  # sync_status
-    ERR_LD_CURVE_MOPEN = -1  # loadCurve
-    ERR_LD_CURVE_MMAP = -2  # loadCurve
-    ERR_LD_CURVE_UMMAP = -3  # loadCurve
-    ERR_INIT_PRU_SSDRV = -1  # init_start_PRU
-    ERR_INIT_PRU_MODE = -2  # init_start_PRU
-    ERR_INIT_PRU_BAUDR = -3  # init_start_PRU
-    ERR_RECV_DATA_OLDMSG = -1  # recv_data_PRU
+    ERR_LD_CURVE_MOPEN = 2  # loadCurve
+    ERR_LD_CURVE_MMAP = 3  # loadCurve
+    ERR_LD_CURVE_UMMAP = 4  # loadCurve
+    ERR_INIT_PRU_SSDRV = 5  # init_start_PRU
+    ERR_INIT_PRU_MODE = 6  # init_start_PRU
+    ERR_INIT_PRU_BAUDR = 7  # init_start_PRU
+    ERR_RECV_DATA_OLDMSG = 8  # recv_data_PRU
 
 
 class ConstSyncMode:
