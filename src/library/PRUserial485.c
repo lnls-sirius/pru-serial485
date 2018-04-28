@@ -27,33 +27,33 @@ Date: April/2018
 
 
 
-#define PRU_NUM         		1
-#define PRU_BINARY 			    "/usr/bin/PRUserial485.bin"
-#define OFFSET_SHRAM_WRITE		0x64		// 100 general purpose bytes
-#define OFFSET_SHRAM_READ		0x1800		//
+#define PRU_NUM             1
+#define PRU_BINARY          "/usr/bin/PRUserial485.bin"
+#define OFFSET_SHRAM_WRITE  0x64    // 100 general purpose bytes
+#define OFFSET_SHRAM_READ   0x1800  //
 
-#define MENSAGEM_ANTIGA			0x55
-#define	MENSAGEM_RECEBIDA_NOVA		0x00
-#define	MENSAGEM_PARA_ENVIAR		0xff
+#define MENSAGEM_ANTIGA         0x55
+#define MENSAGEM_RECEBIDA_NOVA  0x00
+#define MENSAGEM_PARA_ENVIAR    0xff
 
 
 #define GPIO_DATAOUT 0x13C
-#define GPIO_DATAIN 0x138
-#define GPIO0_ADDR 0x44E07000
-#define GPIO1_ADDR 0x4804C000
-#define GPIO2_ADDR 0x481AC000
-#define GPIO3_ADDR 0x481AF000
-#define	CM_PER_ADDR 0x44E00000
-#define	CM_GPIO1	0xAC
-#define	CM_GPIO2	0xB0
-#define	CM_GPIO3	0xB4
+#define GPIO_DATAIN  0x138
+#define GPIO0_ADDR   0x44E07000
+#define GPIO1_ADDR   0x4804C000
+#define GPIO2_ADDR   0x481AC000
+#define GPIO3_ADDR   0x481AF000
+#define CM_PER_ADDR  0x44E00000
+#define CM_GPIO1     0xAC
+#define CM_GPIO2     0xB0
+#define CM_GPIO3     0xB4
 
 
 #define MMAP0_LOC   "/sys/class/uio/uio0/maps/map0/"
 #define MMAP1_LOC   "/sys/class/uio/uio0/maps/map1/"
 
-#define CURVE_BYTES_PER_BLOCK		100000
-#define CURVE_MAX_POINTS_PER_BLOCK	CURVE_BYTES_PER_BLOCK/16
+#define CURVE_BYTES_PER_BLOCK      100000
+#define CURVE_MAX_POINTS_PER_BLOCK CURVE_BYTES_PER_BLOCK/16
 
 #define MAP_SIZE 0x0FFFFFFF
 #define MAP_MASK (MAP_SIZE)
@@ -86,11 +86,12 @@ Date: April/2018
  * prudata[51..] = data
  * prudata[80..83] = Pulse counting
  * prudata[84] = Sync_Ok (0x00 not ok / 0xFF waiting for trigger)
- * prudata[85] = Sync_Mode 	| 0x51 - Single curve sequence & Intercalated read messages
- *				| 0x5E - Single curve sequence & Read messages at End of curve
- *				| 0xC1 - Continuous curve sequence & Intercalated read messages
- *				| 0xCE - Continuous curve sequence & Read messages at End of curve
- *				| 0x5C - Single Sequence - Single CYCLING COMMAND
+ * prudata[85] = Sync_Mode
+          | 0x51 - Single curve sequence & Intercalated read messages
+ *        | 0x5E - Single curve sequence & Read messages at End of curve
+ *        | 0xC1 - Continuous curve sequence & Intercalated read messages
+ *        | 0xCE - Continuous curve sequence & Read messages at End of curve
+ *        | 0x5C - Single Sequence - Single CYCLING COMMAND
  *
  *
  * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
@@ -114,42 +115,42 @@ size_t i;
 
 
 uint8_t hardware_address_serialPRU(){
-	uint8_t endereco = 0x00;
+  uint8_t endereco = 0x00;
 
-	int fd = open("/dev/mem",O_RDWR | O_SYNC);
+  int fd = open("/dev/mem",O_RDWR | O_SYNC);
 
-	// Habilita GPIO2
-	ulong* clk_mngr = (ulong*) mmap(NULL, 0x4000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_PER_ADDR);
-	clk_mngr[CM_GPIO2/4] = (clk_mngr[CM_GPIO2/4] & 0xFC) | 0x02;
+  // Habilita GPIO2
+  ulong* clk_mngr = (ulong*) mmap(NULL, 0x4000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, CM_PER_ADDR);
+  clk_mngr[CM_GPIO2/4] = (clk_mngr[CM_GPIO2/4] & 0xFC) | 0x02;
 
 
-	ulong* pinconf0 =  (ulong*) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO0_ADDR);
-	ulong* pinconf2 =  (ulong*) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO2_ADDR);
+  ulong* pinconf0 =  (ulong*) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO0_ADDR);
+  ulong* pinconf2 =  (ulong*) mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, GPIO2_ADDR);
 
-	if(pinconf0[GPIO_DATAIN/4] & (1 << 10))
-		endereco |= 0b00000001;
+  if(pinconf0[GPIO_DATAIN/4] & (1 << 10))
+    endereco |= 0b00000001;
 
-	if(pinconf0[GPIO_DATAIN/4] & (1 << 11))
-		endereco |= 0b00000010;
+  if(pinconf0[GPIO_DATAIN/4] & (1 << 11))
+    endereco |= 0b00000010;
 
-	if(pinconf0[GPIO_DATAIN/4] & (1 << 9))
-		endereco |= 0b00000100;
+  if(pinconf0[GPIO_DATAIN/4] & (1 << 9))
+    endereco |= 0b00000100;
 
-	if(pinconf2[GPIO_DATAIN/4] & (1 << 17))
-		endereco |= 0b00001000;
+  if(pinconf2[GPIO_DATAIN/4] & (1 << 17))
+    endereco |= 0b00001000;
 
-	if(pinconf0[GPIO_DATAIN/4] & (1 << 8))
-		endereco |= 0b00010000;
+  if(pinconf0[GPIO_DATAIN/4] & (1 << 8))
+    endereco |= 0b00010000;
 
-	close(fd);
+  close(fd);
 
-	return endereco;
+  return endereco;
 }
 
 
 
 int clear_pulse_count_sync(){
-        if(prudata[5]==0x00){                           // Sync disabled. Clear pulse counting
+        if(prudata[5]==0x00){     // Sync disabled. Clear pulse counting
                 prudata[80] = 0;
                 prudata[81] = 0;
                 prudata[82] = 0;
@@ -157,123 +158,122 @@ int clear_pulse_count_sync(){
                 return 0;
         }
         else
-                return -1;                               // Error: not possible to clear pulse counting
-                                                        // while sync operation is enabled.
+                return -1;        // Error: not possible to clear pulse counting
+                                  // while sync operation is enabled.
 }
 
 
 
 
 uint32_t read_pulse_count_sync(){
-	uint32_t counting = 0;
-    	counting = (prudata[83] << 24) + (prudata[82] << 16) + (prudata[81] << 8) + prudata[80];
-	return counting;
+  uint32_t counting = 0;
+  counting = (prudata[83] << 24) + (prudata[82] << 16) + (prudata[81] << 8) + prudata[80];
+  return counting;
 }
 
 
 void set_curve_pointer(uint32_t new_pointer){
-	prudata[10] = (16*new_pointer);					// LSByte do new_pointer [7..0]
-	prudata[11] = (16*new_pointer) >> 8;		// Byte do new_pointer [15..8]
-	prudata[12] = (16*new_pointer) >> 16;		// Byte do new_pointer [23..16]
-	prudata[13] = (16*new_pointer) >> 24;		// MSByte do new_pointer [31..24]
+  prudata[10] = (16*new_pointer);        // LSByte do new_pointer [7..0]
+  prudata[11] = (16*new_pointer) >> 8;   // Byte do new_pointer [15..8]
+  prudata[12] = (16*new_pointer) >> 16;  // Byte do new_pointer [23..16]
+  prudata[13] = (16*new_pointer) >> 24;  // MSByte do new_pointer [31..24]
 
-	while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != new_pointer){
-	}
+  while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != new_pointer){
+  }
 }
 
 uint32_t read_curve_pointer(){
-	uint32_t pointer = 0;
-    	pointer = ((prudata[13] << 24) + (prudata[12] << 16) + (prudata[11] << 8) + prudata[10])/16;
-	return pointer;
+  uint32_t pointer = 0;
+  pointer = ((prudata[13] << 24) + (prudata[12] << 16) + (prudata[11] << 8) + prudata[10])/16;
+  return pointer;
 }
 
 
 int sync_status(){
-	// Sync trigger not waiting
-	if(prudata[84] == 0x00){
-		return 0;
-	}
-	// Sync trigger waiting
-	if(prudata[84] == 0xff){
-		return 1;
-	}
+  // Sync trigger not waiting
+  if(prudata[84] == 0x00){
+    return 0;
+  }
+  // Sync trigger waiting
+  if(prudata[84] == 0xff){
+    return 1;
+  }
 }
 
 
 
 void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address){
-	if(prudata[25]=='M'){
-		clear_pulse_count_sync();
-		set_curve_pointer(0);
+  if(prudata[25]=='M'){
+    clear_pulse_count_sync();
+    set_curve_pointer(0);
 
-		uint32_t delay_ns = delay_us * 1000;
-
-
-		// ----- Instrucao - Sync - Ciclagem
-		if(sync_mode == 0x5C){
-			prudata[50] = 0x06;				// Tamanho
-			prudata[51] = 0xff;				// | Endereco broadcast
-			prudata[52] = 0x50;				// |
-			prudata[53] = 0x00;				// | Comando a ser enviado
-			prudata[54] = 0x01;				// | apos pulso de sync
-			prudata[55] = 0x0f;				// |
-			prudata[56] = 0xa1;				// |
-		}
-		// ----- Instrucao - Sync - SetIx4
-		else{
-		prudata[50] = 0x16;				// Tamanho
-		prudata[51] = sync_address;			// | Endereco do controlador que respondera ao sync
-		prudata[52] = 0x50;				// |
-		prudata[53] = 0x00;				// | Comando a ser enviado
-		prudata[54] = 0x11;				// | apos pulso de sync
-		prudata[55] = 0x11;				// |
-		}
+    uint32_t delay_ns = delay_us * 1000;
 
 
+    // ----- Instrucao - Sync - Ciclagem
+    if(sync_mode == 0x5C){
+      prudata[50] = 0x06;       // Tamanho
+      prudata[51] = 0xff;       // | Endereco broadcast
+      prudata[52] = 0x50;       // |
+      prudata[53] = 0x00;       // | Comando a ser enviado
+      prudata[54] = 0x01;       // | apos pulso de sync
+      prudata[55] = 0x0f;       // |
+      prudata[56] = 0xa1;       // |
+    }
+    // ----- Instrucao - Sync - SetIx4
+    else {
+      prudata[50] = 0x16;          // Tamanho
+      prudata[51] = sync_address;  // | Endereco do controlador que respondera ao sync
+      prudata[52] = 0x50;          // |
+      prudata[53] = 0x00;          // | Comando a ser enviado
+      prudata[54] = 0x11;          // | apos pulso de sync
+      prudata[55] = 0x11;          // |
+    }
 
 
-		// Delay entre comando de sincronismo e requisicao qualquer
-		// ----- Calculo do delay
-		for(i=0; i<3; i++)
-			delay_ns += prudata[26+i] << i*8;
+    // Delay entre comando de sincronismo e requisicao qualquer
+    // ----- Calculo do delay
+    for(i=0; i<3; i++)
+      delay_ns += prudata[26+i] << i*8;
 
-		// ---- Numero de loops = delay / 10 ns. Se delay = 0, apenas 1 loop.
-		delay_ns = delay_ns/10;
-		if (delay_us == 0)
-			delay_ns = 1;
+    // ---- Numero de loops = delay / 10 ns. Se delay = 0, apenas 1 loop.
+    delay_ns = delay_ns/10;
+    if (delay_us == 0)
+      delay_ns = 1;
 
-		// ----- Armazena numero de instrucoes
-		for(i=0; i<3; i++)
-			prudata[29+i] = delay_ns >> i*8;
+    // ----- Armazena numero de instrucoes
+    for(i=0; i<3; i++)
+      prudata[29+i] = delay_ns >> i*8;
 
-		// Modo de Sincronismo
-		// 0x51 - Single curve sequence & Intercalated read messages
-	  // 0x5E - Single curve sequence & Read messages at End of curve
-	  // 0xC1 - Continuous curve sequence & Intercalated read messages
-	  // 0xCE - Continuous curve sequence & Read messages at End of curve
-		prudata[85] = sync_mode;
+    // Modo de Sincronismo
+    // 0x51 - Single curve sequence & Intercalated read messages
+    // 0x5E - Single curve sequence & Read messages at End of curve
+    // 0xC1 - Continuous curve sequence & Intercalated read messages
+    // 0xCE - Continuous curve sequence & Read messages at End of curve
+    prudata[85] = sync_mode;
 
-		// Inicio modo sincrono
-		prudata[5] = 0xff;
+    // Inicio modo sincrono
+    prudata[5] = 0xff;
 
-		// Aguarda início efetivo
-		while(sync_status() == 0);
+    // Aguarda início efetivo
+    while(sync_status() == 0)
 
-	}
+  }  // if(prudata[25]=='M'){
+
 }
 
 
 void set_sync_stop_PRU(){
-	if(prudata[25]=='M')
-		prudata[5] = 0x00;
-		prussdrv_exec_program(PRU_NUM, PRU_BINARY);
+  if(prudata[25]=='M')
+    prudata[5] = 0x00;
+    prussdrv_exec_program(PRU_NUM, PRU_BINARY);
 }
 
 
 void close_PRU(){
-	// ----- Desabilita PRU e fecha mapeamento da shared RAM
-	prussdrv_pru_disable(PRU_NUM);
-	prussdrv_exit();
+  // ----- Desabilita PRU e fecha mapeamento da shared RAM
+  prussdrv_pru_disable(PRU_NUM);
+  prussdrv_exit();
 }
 
 
@@ -282,445 +282,439 @@ void close_PRU(){
 
 int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints, uint8_t block){
 
-	// ----- DDR address
-	unsigned int DDR_address[2];
+  // ----- DDR address
+  unsigned int DDR_address[2];
 
-	FILE* fp;
-	fp = fopen(MMAP1_LOC "addr", "rt");
-	fscanf(fp, "%x", &DDR_address[0]);
-	fclose(fp);
+  FILE* fp;
+  fp = fopen(MMAP1_LOC "addr", "rt");
+  fscanf(fp, "%x", &DDR_address[0]);
+  fclose(fp);
 
-	fp = fopen(MMAP1_LOC "size", "rt");
-	fscanf(fp, "%x", &DDR_address[1]);
-	fclose(fp);
+  fp = fopen(MMAP1_LOC "size", "rt");
+  fscanf(fp, "%x", &DDR_address[1]);
+  fclose(fp);
 
-	int fd;
-	void *map_base, *virt_addr;
-	off_t target = DDR_address[0];
+  int fd;
+  void *map_base, *virt_addr;
+  off_t target = DDR_address[0];
 
-	if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
-		printf("Failed to open memory!");
-		return -1;
-	}
+  if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
+    printf("Failed to open memory!");
+    return -1;
+  }
 
-	map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
-	if(map_base == (void *) -1) {
-		printf("Failed to map base address");
-		return -1;
-	}
+  map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
+  if(map_base == (void *) -1) {
+    printf("Failed to map base address");
+    return -1;
+  }
 
-	uint32_t value1, value2, value3, value4 = 0;
-	float read1, read2, read3, read4 = 0;
-	int i;
+  uint32_t value1, value2, value3, value4 = 0;
+  float read1, read2, read3, read4 = 0;
+  int i;
 
-	target += block * (CURVE_BYTES_PER_BLOCK);
+  target += block * (CURVE_BYTES_PER_BLOCK);
 
-	for(i=0; i<CurvePoints; i++){
+  for(i=0; i<CurvePoints; i++){
 
-		read1 = curve1[i];
-		read2 = curve2[i];
-		read3 = curve3[i];
-		read4 = curve4[i];
+    read1 = curve1[i];
+    read2 = curve2[i];
+    read3 = curve3[i];
+    read4 = curve4[i];
 
-		value1 = (uint32_t)(*(uint32_t*)&read1);
-		value2 = (uint32_t)(*(uint32_t*)&read2);
-		value3 = (uint32_t)(*(uint32_t*)&read3);
-		value4 = (uint32_t)(*(uint32_t*)&read4);
+    value1 = (uint32_t)(*(uint32_t*)&read1);
+    value2 = (uint32_t)(*(uint32_t*)&read2);
+    value3 = (uint32_t)(*(uint32_t*)&read3);
+    value4 = (uint32_t)(*(uint32_t*)&read4);
 
-		// ----- CURVA 1
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value1 >> 0;
+    // ----- CURVA 1
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value1 >> 0;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value1 >> 8;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value1 >> 8;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value1 >> 16;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value1 >> 16;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value1 >> 24;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value1 >> 24;
 
-		target++;
-
-
-		// ----- CURVA 2
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value2 >> 0;
-
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value2 >> 8;
-
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value2 >> 16;
-
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value2 >> 24;
-
-		target++;
+    target++;
 
 
-		// ----- CURVA 3
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value3 >> 0;
+    // ----- CURVA 2
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value2 >> 0;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value3 >> 8;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value2 >> 8;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value3 >> 16;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value2 >> 16;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value3 >> 24;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value2 >> 24;
 
-		target++;
+    target++;
 
 
-		// ----- CURVA 4
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value4 >> 0;
-		while((*((uint8_t *) virt_addr)) != ((value4 >> 0)&0xff)){
-		}
+    // ----- CURVA 3
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value3 >> 0;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value4 >> 8;
-		while((*((uint8_t *) virt_addr)) != ((value4 >> 8)&0xff)){
-		}
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value3 >> 8;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value4 >> 16;
-		while((*((uint8_t *) virt_addr)) != ((value4 >> 16)&0xff)){
-		}
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value3 >> 16;
 
-		target++;
-		virt_addr = map_base + (target & MAP_MASK);
-		*((uint8_t *) virt_addr) = value4 >> 24;
-		while((*((uint8_t *) virt_addr)) != ((value4 >> 24)&0xff)){
-		}
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value3 >> 24;
 
-		target++;
+    target++;
 
-	}
 
-	if (((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
-		// Tamanho em bytes
-		prudata[20] = (16*CurvePoints);			// LSByte do tamanho curva [7..0]
-		prudata[21] = (16*CurvePoints) >> 8;		// Byte do tamanho curva [15..8]
-		prudata[22] = (16*CurvePoints) >> 16;		// Byte do tamanho curva [23..16]
-		prudata[23] = (16*CurvePoints) >> 24;		// MSByte do tamanho curva [31..24]
-
-		while(((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
-		}
-	}
-
-    if(munmap(map_base, MAP_SIZE) == -1) {
-    	printf("Failed to unmap memory");
-       	return -1;
+    // ----- CURVA 4
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value4 >> 0;
+    while((*((uint8_t *) virt_addr)) != ((value4 >> 0)&0xff)){
     }
 
-	close(fd);
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value4 >> 8;
+    while((*((uint8_t *) virt_addr)) != ((value4 >> 8)&0xff)){
+    }
 
-	printf("%d-point curve successfully loaded.\n", CurvePoints);
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value4 >> 16;
+    while((*((uint8_t *) virt_addr)) != ((value4 >> 16)&0xff)){
+    }
 
-	return 0;
+    target++;
+    virt_addr = map_base + (target & MAP_MASK);
+    *((uint8_t *) virt_addr) = value4 >> 24;
+    while((*((uint8_t *) virt_addr)) != ((value4 >> 24)&0xff)){
+    }
+
+    target++;
+
+  }
+
+  if (((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
+    // Tamanho em bytes
+    prudata[20] = (16*CurvePoints);         // LSByte do tamanho curva [7..0]
+    prudata[21] = (16*CurvePoints) >> 8;    // Byte do tamanho curva [15..8]
+    prudata[22] = (16*CurvePoints) >> 16;   // Byte do tamanho curva [23..16]
+    prudata[23] = (16*CurvePoints) >> 24;   // MSByte do tamanho curva [31..24]
+
+    while(((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
+    }
+  }
+
+    if(munmap(map_base, MAP_SIZE) == -1) {
+      printf("Failed to unmap memory");
+         return -1;
+    }
+
+  close(fd);
+
+  printf("%d-point curve successfully loaded.\n", CurvePoints);
+
+  return 0;
 }
 
 
 void set_curve_block(uint8_t block){
-	unsigned int DDR_address[2];
+  unsigned int DDR_address[2];
 
-   	FILE* fp;
-   	fp = fopen(MMAP1_LOC "addr", "rt");
-   	fscanf(fp, "%x", &DDR_address[0]);
-   	fclose(fp);
+  FILE* fp;
+  fp = fopen(MMAP1_LOC "addr", "rt");
+  fscanf(fp, "%x", &DDR_address[0]);
+  fclose(fp);
 
-	DDR_address[0] += block * (CURVE_BYTES_PER_BLOCK);
+  DDR_address[0] += block * (CURVE_BYTES_PER_BLOCK);
 
-	// Endereco do bloco na DDR
-	prudata[15] = (DDR_address[0]) >> 0;		// LSByte [7..0]
-	prudata[16] = (DDR_address[0]) >> 8;		// Byte [15..8]
-	prudata[17] = (DDR_address[0]) >> 16;		// Byte [23..16]
-	prudata[18] = (DDR_address[0]) >> 24;		// MSByte [31..24]
-
+  // Endereco do bloco na DDR
+  prudata[15] = (DDR_address[0]) >> 0;    // LSByte [7..0]
+  prudata[16] = (DDR_address[0]) >> 8;    // Byte [15..8]
+  prudata[17] = (DDR_address[0]) >> 16;   // Byte [23..16]
+  prudata[18] = (DDR_address[0]) >> 24;   // MSByte [31..24]
 
 }
 
 
 uint8_t read_curve_block(){
-	unsigned int DDR_address[2], address;
-	uint8_t block = 0;
+  unsigned int DDR_address[2], address;
+  uint8_t block = 0;
 
-   	FILE* fp;
-   	fp = fopen(MMAP1_LOC "addr", "rt");
-   	fscanf(fp, "%x", &DDR_address[0]);
-   	fclose(fp);
+  FILE* fp;
+  fp = fopen(MMAP1_LOC "addr", "rt");
+  fscanf(fp, "%x", &DDR_address[0]);
+  fclose(fp);
 
-	// Endereco do bloco na DDR
-	address = (prudata[18] << 24) + (prudata[17] << 16) +(prudata[16] << 8) +(prudata[15] << 0);
-	block = (address - DDR_address[0])/CURVE_BYTES_PER_BLOCK;
+  // Endereco do bloco na DDR
+  address = (prudata[18] << 24) + (prudata[17] << 16) +(prudata[16] << 8) +(prudata[15] << 0);
+  block = (address - DDR_address[0])/CURVE_BYTES_PER_BLOCK;
 
-	return block;
+  return block;
 }
 
 int init_start_PRU(int baudrate, char mode){
 
 
-	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
+  tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
 
-	// ----- Inicializacao da PRU
-	prussdrv_init();
+  // ----- Inicializacao da PRU
+  prussdrv_init();
 
-	// ----- Inicializacao da interrupcao PRU
-	if (prussdrv_open(PRU_EVTOUT_1)){
-		printf("prussdrv_open open failed\n");
-		return -1;
-	}
-	prussdrv_pruintc_init(&pruss_intc_initdata);
-
-
-	// ----- Mapeamento Shared RAM
-	prussdrv_map_prumem(PRUSS0_SHARED_DATARAM, (void**)&prudata);
+  // ----- Inicializacao da interrupcao PRU
+  if (prussdrv_open(PRU_EVTOUT_1)){
+    printf("prussdrv_open open failed\n");
+    return -1;
+  }
+  prussdrv_pruintc_init(&pruss_intc_initdata);
 
 
-	// ----- SHRAM - General Purpose = 0x00
-	for(i=0; i<100; i++)
-		prudata[i] = 0x00;
+  // ----- Mapeamento Shared RAM
+  prussdrv_map_prumem(PRUSS0_SHARED_DATARAM, (void**)&prudata);
 
 
-	// ----- MODO DE OPERACAO: Master/Slave
-	if(mode=='M' || mode=='S')
-		prudata[25] = mode;
-	// Modo nao existente
-	else{
-		close_PRU();
-		printf("Requested mode does not exist.\n");
-		return -1;
-	}
-
-    // ----- Inicializacao: contador de sincronismo zerado
-	prudata[80] = 0;
-    prudata[81] = 0;
-
-	// ----- Inicializacao MASTER: procedimento sincrono desabilitado
-	if(prudata[25]=='M')
-		set_sync_stop_PRU();
-
-	// ----- Inicializacao SLAVE: nenhuma mensagem nova na serial
-	if(prudata[25]=='S')
-		prudata[1]=MENSAGEM_ANTIGA;
+  // ----- SHRAM - General Purpose = 0x00
+  for(i=0; i<100; i++)
+    prudata[i] = 0x00;
 
 
-	// Endereco de Hardware
-	prudata[24] = hardware_address_serialPRU();
+  // ----- MODO DE OPERACAO: Master/Slave
+  if(mode=='M' || mode=='S')
+    prudata[25] = mode;
+  else{
+    // Modo nao existente
+    close_PRU();
+    printf("Requested mode does not exist.\n");
+    return -1;
+  }
+
+  // ----- Inicializacao: contador de sincronismo zerado
+  prudata[80] = 0;
+  prudata[81] = 0;
+
+  // ----- Inicializacao MASTER: procedimento sincrono desabilitado
+  if(prudata[25]=='M')
+    set_sync_stop_PRU();
+
+  // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial
+  if(prudata[25]=='S')
+    prudata[1]=MENSAGEM_ANTIGA;
 
 
-
-	// ----- Configuracao Baudrate
-	uint32_t one_byte_length_ns = 0;
-	switch (baudrate){
-		case 6:
-		    prudata[2] = 0x28;		// BRGCONFIG
-		    prudata[3] = 0x02;		// DIVLSB
-		    prudata[4] = 0x00;		// DIVMSB
-		    one_byte_length_ns = (int) 10000/6;
-		    break;
-
-		case 10:
-		    prudata[2] = 0x28;		// BRGCONFIG
-		    prudata[3] = 0x01;		// DIVLSB
-		    prudata[4] = 0x00;		// DIVMSB
-		    one_byte_length_ns = (int) 10000/10;
-		    break;
-
-		case 12:
-		    prudata[2] = 0x24;		// BRGCONFIG
-		    prudata[3] = 0x01;		// DIVLSB
-		    prudata[4] = 0x00;		// DIVMSB
-		    one_byte_length_ns = (int) 10000/12;
-		    break;
-
-		case 9600:
-			prudata[2] = 0x0a;	// BRGCONFIG
-			prudata[3] = 0x86;	// DIVLSB
-			prudata[4] = 0x01;	// DIVMSB
-			one_byte_length_ns = (int) 100000000/96;
-			break;
-
-		case 14400:
-			prudata[2] = 0x07;	// BRGCONFIG
-			prudata[3] = 0x04;	// DIVLSB
-			prudata[4] = 0x01;	// DIVMSB
-			one_byte_length_ns = (int) 100000000/144;
-			break;
-
-		case 19200:
-			prudata[2] = 0x05;	// BRGCONFIG
-			prudata[3] = 0xc3;	// DIVLSB
-			prudata[4] = 0x00;	// DIVMSB
-			one_byte_length_ns = (int) 100000000/192;
-			break;
-
-		case 38400:
-			prudata[2] = 0x15;	// BRGCONFIG
-			prudata[3] = 0xc3;	// DIVLSB
-			prudata[4] = 0x00;	// DIVMSB
-			one_byte_length_ns = (int) 100000000/384;
-			break;
-
-		case 57600:
-			prudata[2] = 0x27;	// BRGCONFIG
-			prudata[3] = 0x04;	// DIVLSB
-			prudata[4] = 0x01;	// DIVMSB
-			one_byte_length_ns = (int) 100000000/576;
-			break;
-
-		case 115200:
-			prudata[2] = 0x09;	// BRGCONFIG
-			prudata[3] = 0x20;	// DIVLSB
-			prudata[4] = 0x00;	// DIVMSB
-			one_byte_length_ns = (int) 100000000/1152;
-			break;
-
-		default:
-			close_PRU();		// Nao definido
-			printf("Baudrate not defined.\n");
-			return -1;
-	}
-	prudata[26] = one_byte_length_ns;
-	prudata[27] = one_byte_length_ns >> 8;
-	prudata[28] = one_byte_length_ns >>16;
-
-	// ----- DDR address
-	unsigned int DDR_address[2];
-
-   	FILE* fp;
-   	fp = fopen(MMAP1_LOC "addr", "rt");
-   	fscanf(fp, "%x", &DDR_address[0]);
-   	fclose(fp);
-
-	fp = fopen(MMAP1_LOC "size", "rt");
-   	fscanf(fp, "%x", &DDR_address[1]);
-   	fclose(fp);
+  // Endereco de Hardware
+  prudata[24] = hardware_address_serialPRU();
 
 
-	// Endereco da DDR
-	prudata[15] = (DDR_address[0]) >> 0;		// LSByte [7..0]
-	prudata[16] = (DDR_address[0]) >> 8;		// Byte [15..8]
-	prudata[17] = (DDR_address[0]) >> 16;		// Byte [23..16]
-	prudata[18] = (DDR_address[0]) >> 24;		// MSByte [31..24]
+  // ----- Configuracao Baudrate
+  uint32_t one_byte_length_ns = 0;
+  switch (baudrate){
+    case 6:
+        prudata[2] = 0x28;    // BRGCONFIG
+        prudata[3] = 0x02;    // DIVLSB
+        prudata[4] = 0x00;    // DIVMSB
+        one_byte_length_ns = (int) 10000/6;
+        break;
+
+    case 10:
+        prudata[2] = 0x28;    // BRGCONFIG
+        prudata[3] = 0x01;    // DIVLSB
+        prudata[4] = 0x00;    // DIVMSB
+        one_byte_length_ns = (int) 10000/10;
+        break;
+
+    case 12:
+        prudata[2] = 0x24;    // BRGCONFIG
+        prudata[3] = 0x01;    // DIVLSB
+        prudata[4] = 0x00;    // DIVMSB
+        one_byte_length_ns = (int) 10000/12;
+        break;
+
+    case 9600:
+      prudata[2] = 0x0a;      // BRGCONFIG
+      prudata[3] = 0x86;      // DIVLSB
+      prudata[4] = 0x01;      // DIVMSB
+      one_byte_length_ns = (int) 100000000/96;
+      break;
+
+    case 14400:
+      prudata[2] = 0x07;    // BRGCONFIG
+      prudata[3] = 0x04;    // DIVLSB
+      prudata[4] = 0x01;    // DIVMSB
+      one_byte_length_ns = (int) 100000000/144;
+      break;
+
+    case 19200:
+      prudata[2] = 0x05;    // BRGCONFIG
+      prudata[3] = 0xc3;    // DIVLSB
+      prudata[4] = 0x00;    // DIVMSB
+      one_byte_length_ns = (int) 100000000/192;
+      break;
+
+    case 38400:
+      prudata[2] = 0x15;    // BRGCONFIG
+      prudata[3] = 0xc3;    // DIVLSB
+      prudata[4] = 0x00;    // DIVMSB
+      one_byte_length_ns = (int) 100000000/384;
+      break;
+
+    case 57600:
+      prudata[2] = 0x27;    // BRGCONFIG
+      prudata[3] = 0x04;    // DIVLSB
+      prudata[4] = 0x01;    // DIVMSB
+      one_byte_length_ns = (int) 100000000/576;
+      break;
+
+    case 115200:
+      prudata[2] = 0x09;    // BRGCONFIG
+      prudata[3] = 0x20;    // DIVLSB
+      prudata[4] = 0x00;    // DIVMSB
+      one_byte_length_ns = (int) 100000000/1152;
+      break;
+
+    default:
+      close_PRU();    // Nao definido
+      printf("Baudrate not defined.\n");
+      return -1;
+  }
+  prudata[26] = one_byte_length_ns;
+  prudata[27] = one_byte_length_ns >> 8;
+  prudata[28] = one_byte_length_ns >>16;
+
+  // ----- DDR address
+  unsigned int DDR_address[2];
+
+  FILE* fp;
+  fp = fopen(MMAP1_LOC "addr", "rt");
+  fscanf(fp, "%x", &DDR_address[0]);
+  fclose(fp);
+
+  fp = fopen(MMAP1_LOC "size", "rt");
+  fscanf(fp, "%x", &DDR_address[1]);
+  fclose(fp);
 
 
+  // Endereco da DDR
+  prudata[15] = (DDR_address[0]) >> 0;    // LSByte [7..0]
+  prudata[16] = (DDR_address[0]) >> 8;    // Byte [15..8]
+  prudata[17] = (DDR_address[0]) >> 16;   // Byte [23..16]
+  prudata[18] = (DDR_address[0]) >> 24;   // MSByte [31..24]
 
 
-	// ----- Executar codigo na PRU
-	prussdrv_exec_program (PRU_NUM, PRU_BINARY);
+  // ----- Executar codigo na PRU
+  prussdrv_exec_program (PRU_NUM, PRU_BINARY);
 
 
-
-
-	return 0;
+  return 0;
 }
 
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
-	uint32_t timeout_instructions;
-	float timeout_inst;
+  uint32_t timeout_instructions;
+  float timeout_inst;
 
-	timeout_inst = timeout_ms*66600;
-	timeout_instructions = (int)timeout_inst;
-
-
-	// ----- MASTER: Configuracao do Timeout
-	if(prudata[25]=='M'){
-		prudata[6] = timeout_instructions;			// LSByte do timeout_instructions [7..0]
-		prudata[7] = timeout_instructions >> 8;			// Byte do timeout_instructions [15..8]
-		prudata[8] = timeout_instructions >> 16;		// Byte do timeout_instructions [23..16]
-		prudata[9] = timeout_instructions >> 24;		// MSByte do timeout_instructions [31..24]
-	}
-
-	// ----- Tamanho dos dados
-	prudata[OFFSET_SHRAM_WRITE] = *tamanho;				// LSByte do tamanho dos dados [7..0]
-	prudata[OFFSET_SHRAM_WRITE+1] = *tamanho >> 8;		// MSByte do tamanho dos dados [15..8]
-	prudata[OFFSET_SHRAM_WRITE+2] = *tamanho >> 16;		// MSByte do tamanho dos dados [23..16]
-	prudata[OFFSET_SHRAM_WRITE+3] = *tamanho >> 24;		// MSByte do tamanho dos dados [31..24]
+  timeout_inst = timeout_ms*66600;
+  timeout_instructions = (int)timeout_inst;
 
 
-	// ----- Insere na memoria - Dados a enviar
-	for(i=0; i<*tamanho; i++)
-		prudata[OFFSET_SHRAM_WRITE+4+i] = data[i];
+  // ----- MASTER: Configuracao do Timeout
+  if(prudata[25]=='M'){
+    prudata[6] = timeout_instructions;        // LSByte do timeout_instructions [7..0]
+    prudata[7] = timeout_instructions >> 8;   // Byte do timeout_instructions [15..8]
+    prudata[8] = timeout_instructions >> 16;  // Byte do timeout_instructions [23..16]
+    prudata[9] = timeout_instructions >> 24;  // MSByte do timeout_instructions [31..24]
+  }
 
-	// ----- Dados prontos para envio
-	prudata[1] = MENSAGEM_PARA_ENVIAR;
+  // ----- Tamanho dos dados
+  prudata[OFFSET_SHRAM_WRITE] = *tamanho;           // LSByte do tamanho dos dados [7..0]
+  prudata[OFFSET_SHRAM_WRITE+1] = *tamanho >> 8;    // Byte do tamanho dos dados [15..8]
+  prudata[OFFSET_SHRAM_WRITE+2] = *tamanho >> 16;   // Byte do tamanho dos dados [23..16]
+  prudata[OFFSET_SHRAM_WRITE+3] = *tamanho >> 24;   // MSByte do tamanho dos dados [31..24]
 
-	// ----- Aguarda sinal de finalizacao do ciclo
-	prussdrv_pru_wait_event(PRU_EVTOUT_1);
 
-	// ----- Clear evento
-	prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+  // ----- Insere na memoria - Dados a enviar
+  for(i=0; i<*tamanho; i++)
+    prudata[OFFSET_SHRAM_WRITE+4+i] = data[i];
 
-	// ----- SLAVE: Aguarda fim de envio
-	if(prudata[25]=='S')
-		while(prudata[1] != 0x55);
+  // ----- Dados prontos para envio
+  prudata[1] = MENSAGEM_PARA_ENVIAR;
 
-	return 0;
+  // ----- Aguarda sinal de finalizacao do ciclo
+  prussdrv_pru_wait_event(PRU_EVTOUT_1);
+
+  // ----- Clear evento
+  prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+
+  // ----- SLAVE: Aguarda fim de envio
+  if(prudata[25]=='S')
+    while(prudata[1] != 0x55);
+
+  return 0;
 }
 
 
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
-	// ---------- MASTER MODE ----------
-	if(prudata[25]=='M'){
-		// Aguarda dados prontos na Shared RAM
-		while(prudata[1] != 0x00){
-		}
+  // ---------- MASTER MODE ----------
+  if(prudata[25]=='M'){
+    // Aguarda dados prontos na Shared RAM
+    while(prudata[1] != 0x00){
+    }
 
-		*tamanho = 0;
+    *tamanho = 0;
 
-		// ----- Copia dos dados recebidos
-		// Tamanho
-		for(i=0; i<4; i++)
-			*tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
-		// Dados
-		for(i=0; i<*tamanho; i++)
-			data[i] = prudata[OFFSET_SHRAM_READ+4+i];
+    // ----- Copia dos dados recebidos
+    // Tamanho
+    for(i=0; i<4; i++)
+      *tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+    // Dados
+    for(i=0; i<*tamanho; i++)
+      data[i] = prudata[OFFSET_SHRAM_READ+4+i];
 
-		return 0;
-	}
-
-
-	// ---------- SLAVE MODE ----------
-	if(prudata[25]=='S'){
-
-		// ----- Nova mensagem recebida !
-		if(prudata[1] == MENSAGEM_RECEBIDA_NOVA){
-			*tamanho = 0;
-
-			// ----- Copia dos dados recebidos
-			// Tamanho
-			for(i=0; i<4; i++)
-				*tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
-			// Dados
-			for(i=0; i<*tamanho; i++)
-				data[i] = prudata[OFFSET_SHRAM_READ+4+i];
-
-			// ----- Sinaliza mensagem antiga
-			prudata[1] = MENSAGEM_ANTIGA;
-
-			return 0;
-		}
+    return 0;
+  }
 
 
-		// ----- Mensagem antiga no buffer
-		if(prudata[1] == MENSAGEM_ANTIGA)
-			return -1;
-	}
+  // ---------- SLAVE MODE ----------
+  if(prudata[25]=='S'){
+
+    // ----- Nova mensagem recebida !
+    if(prudata[1] == MENSAGEM_RECEBIDA_NOVA){
+      *tamanho = 0;
+
+      // ----- Copia dos dados recebidos
+      // Tamanho
+      for(i=0; i<4; i++)
+        *tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+      // Dados
+      for(i=0; i<*tamanho; i++)
+        data[i] = prudata[OFFSET_SHRAM_READ+4+i];
+
+      // ----- Sinaliza mensagem antiga
+      prudata[1] = MENSAGEM_ANTIGA;
+
+      return 0;
+    }
+
+
+    // ----- Mensagem antiga no buffer
+    if(prudata[1] == MENSAGEM_ANTIGA)
+      return -1;
+  }
 }

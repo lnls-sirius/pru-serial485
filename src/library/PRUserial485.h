@@ -102,11 +102,11 @@ uint32_t read_curve_pointer();
  * mode: modo de operacao. 'M' para master e 'S' para slave
  *
  * Velocidades disponiveis:
- * (6)     Mbps		|	(19200)  bps
- * (10)    Mbps		|	(38400)  bps
- * (12)    Mbps		|	(57600)  bps
- * (9600)  bps		|	(115200) bps
- * (14400) bps		|
+ * (6)     Mbps    |  (19200)  bps
+ * (10)    Mbps    |  (38400)  bps
+ * (12)    Mbps    |  (57600)  bps
+ * (9600)  bps     |  (115200) bps
+ * (14400) bps     |
 */
 int init_start_PRU(int baudrate, char mode);
 
@@ -147,14 +147,14 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
  *
  * * --Retorno--
  * MODO MASTER:
- * 0:  	apos a copia da resposta recebida (resposta válida, ignorada ou
- * 		timeout) nos enderecos indicados pelos parametros da funcao.
+ * 0:    apos a copia da resposta recebida (resposta válida, ignorada ou
+ *     timeout) nos enderecos indicados pelos parametros da funcao.
  *
  *
  * MODO SLAVE:
- * 0:  	apos a copia dos novos dados recebidos nos enderecos indicados
- * 		pelos parametros da funcao.
- *-1:	caso nao exista novos dados de recepcao no buffer
+ * 0:    apos a copia dos novos dados recebidos nos enderecos indicados
+ *     pelos parametros da funcao.
+ *-1:  caso nao exista novos dados de recepcao no buffer
 */
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
 
@@ -166,11 +166,11 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
  * SOMENTE MODO MASTER
  * --Parametro--
  * PROCEDIMENTO SINCRONO - START
- * Sync_Mode 	| 0x51 - Single curve sequence & Intercalated read messages
- *				| 0x5E - Single curve sequence & Read messages at End of curve
- *				| 0xC1 - Continuous curve sequence & Intercalated read messages
- *				| 0xCE - Continuous curve sequence & Read messages at End of curve
- *               | 0x5C - Single Sequence - Single CYCLING COMMAND
+ * Sync_Mode   | 0x51 - Single curve sequence & Intercalated read messages
+ *             | 0x5E - Single curve sequence & Read messages at End of curve
+ *             | 0xC1 - Continuous curve sequence & Intercalated read messages
+ *             | 0xCE - Continuous curve sequence & Read messages at End of curve
+ *             | 0x5C - Single Sequence - Single CYCLING COMMAND
  * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
  * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5C
  * Sinaliza o inicio do procedimento sincrono via PRU
@@ -204,7 +204,7 @@ uint8_t hardware_address_serialPRU();
  * Se o sincronismo estiver desabilitado, zera contador de pulsos
  *
  * --Retorno--
- * 0:  	apos zerar contador
+ *  0: apos zerar contador
  * -1: Caso o modo sincrono esteja habilitado no modo master
 */
 int clear_pulse_count_sync();
