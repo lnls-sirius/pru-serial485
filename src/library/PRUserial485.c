@@ -14,14 +14,7 @@ Author: Patricia HENRIQUES NALLIN
 Date: April/2018
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <unistd.h>
-#include <prussdrv.h>
-#include <pruss_intc_mapping.h>
-
+# include "PRUserial485.h"
 #include <fcntl.h>
 #include <sys/mman.h>
 
@@ -55,20 +48,6 @@ Date: April/2018
 
 #define MAP_SIZE 0x0FFFFFFF
 #define MAP_MASK (MAP_SIZE)
-
-/* Return codes */
-
-#define SYNC_OFF 0                 // sync_status
-#define SYNC_ON 1                  // sync_status
-#define OK 0
-#define ERR_CLEAR_PULSE 1          // clear_pulse_count_sync
-#define ERR_LD_CURVE_MOPEN 2       // loadCurve
-#define ERR_LD_CURVE_MMAP 3        // loadCurve
-#define ERR_LD_CURVE_UMMAP 4       // loadCurve
-#define ERR_INIT_PRU_SSDRV 5       // init_start_PRU
-#define ERR_INIT_PRU_MODE 6        // init_start_PRU
-#define ERR_INIT_PRU_BAUDR 7       // init_start_PRU
-#define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
 
 
 
@@ -448,7 +427,7 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
 
   // printf("%d-point curve successfully loaded.\n", CurvePoints);
 
-  return 0;
+  return OK;
 }
 
 
@@ -642,7 +621,7 @@ int init_start_PRU(int baudrate, char mode){
   prussdrv_exec_program (PRU_NUM, PRU_BINARY);
 
 
-  return 0;
+  return OK;
 }
 
 
@@ -688,7 +667,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
   if(prudata[25]=='S')
     while(prudata[1] != 0x55);
 
-  return 0;
+  return OK;
 }
 
 
@@ -710,7 +689,7 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
     for(i=0; i<*tamanho; i++)
       data[i] = prudata[OFFSET_SHRAM_READ+4+i];
 
-    return 0;
+    return OK;
   }
 
 
@@ -732,7 +711,7 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
       // ----- Sinaliza mensagem antiga
       prudata[1] = MENSAGEM_ANTIGA;
 
-      return 0;
+      return OK;
     }
 
 
