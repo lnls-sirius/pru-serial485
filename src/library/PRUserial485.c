@@ -58,17 +58,17 @@ Date: April/2018
 
 /* Return codes */
 
+#define SYNC_OFF 0                 // sync_status
+#define SYNC_ON 1                  // sync_status
 #define OK 0
-#define ERR_CLEAR_PULSE 1
-#define SYNC_OFF 0
-#define SYNC_ON 1
-#define ERR_LD_CURVE_MOPEN 2
-#define ERR_LD_CURVE_MMAP 3
-#define ERR_LD_CURVE_UMMAP 4
-#define ERR_INIT_PRU_SSDRV 5
-#define ERR_INIT_PRU_MODE 6
-#define ERR_INIT_PRU_BAUDR 7
-#define ERR_RECV_DATA_OLDMSG 8
+#define ERR_CLEAR_PULSE 1          // clear_pulse_count_sync
+#define ERR_LD_CURVE_MOPEN 2       // loadCurve
+#define ERR_LD_CURVE_MMAP 3        // loadCurve
+#define ERR_LD_CURVE_UMMAP 4       // loadCurve
+#define ERR_INIT_PRU_SSDRV 5       // init_start_PRU
+#define ERR_INIT_PRU_MODE 6        // init_start_PRU
+#define ERR_INIT_PRU_BAUDR 7       // init_start_PRU
+#define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
 
 
 

@@ -46,10 +46,10 @@ data_size = ctypes.c_uint32(0)
 class ConstReturn:
     """Namespace for return constants."""
 
-    OK = 0
-    ERR_CLEAR_PULSE = 1  # clear_pulse_count_sync
     SYNC_OFF = 0  # sync_status
     SYNC_ON = 1  # sync_status
+    OK = 0
+    ERR_CLEAR_PULSE = 1  # clear_pulse_count_sync
     ERR_LD_CURVE_MOPEN = 2  # loadCurve
     ERR_LD_CURVE_MMAP = 3  # loadCurve
     ERR_LD_CURVE_UMMAP = 4  # loadCurve
