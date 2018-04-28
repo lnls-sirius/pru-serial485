@@ -43,6 +43,32 @@ C4_buffer = (ctypes.c_float * 262144)()
 data_size = ctypes.c_uint32(0)
 
 
+class ConstReturn:
+    """Namespace for return constants."""
+    OK = 0
+    ERR_CLEAR_PULSE = -1  # clear_pulse_count_sync
+    SYNC_OFF = 0  # sync_status
+    SYNC_ON = 1  # sync_status
+    ERR_LD_CURVE_MOPEN = -1  # loadCurve
+    ERR_LD_CURVE_MMAP = -2  # loadCurve
+    ERR_LD_CURVE_UMMAP = -3  # loadCurve
+    ERR_INIT_PRU_SSDRV = -1  # init_start_PRU
+    ERR_INIT_PRU_MODE = -2  # init_start_PRU
+    ERR_INIT_PRU_BAUDR = -3  # init_start_PRU
+    ERR_RECV_DATA_OLDMSG = -1  # recv_data_PRU
+
+
+class ConstSyncMode:
+    """Namespace for PRU sync modes."""
+
+    MIGINT = 0x51  # Single curve sequence & Read msgs at End of curve
+    MIGEND = 0x5E  # Single curve sequence & Read msgs at End of curve
+    RMPINT = 0xC1  # Contin. curve sequence & Intercalated read messages
+    RMPEND = 0xCE  # Contin. curve sequence & Read msgs at End of curve
+    CYCLE = 0x5C   # Single Sequence - Single CYCLING COMMAND
+    ALL = (MIGINT, MIGEND, RMPINT, RMPEND, CYCLE)
+
+
 def PRUserial485_open(baudrate, mode):
     """Procedimento de inicialização da PRU."""
     libPRUserial485.init_start_PRU(baudrate, ctypes.c_char(mode))
