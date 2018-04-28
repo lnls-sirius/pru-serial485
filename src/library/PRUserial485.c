@@ -36,7 +36,6 @@ Date: April/2018
 #define MENSAGEM_RECEBIDA_NOVA  0x00
 #define MENSAGEM_PARA_ENVIAR    0xff
 
-
 #define GPIO_DATAOUT 0x13C
 #define GPIO_DATAIN  0x138
 #define GPIO0_ADDR   0x44E07000
@@ -48,7 +47,6 @@ Date: April/2018
 #define CM_GPIO2     0xB0
 #define CM_GPIO3     0xB4
 
-
 #define MMAP0_LOC   "/sys/class/uio/uio0/maps/map0/"
 #define MMAP1_LOC   "/sys/class/uio/uio0/maps/map1/"
 
@@ -57,6 +55,7 @@ Date: April/2018
 
 #define MAP_SIZE 0x0FFFFFFF
 #define MAP_MASK (MAP_SIZE)
+
 
 
 /* PRU SHARED MEMORY (12kB) - MAPPING
@@ -150,18 +149,17 @@ uint8_t hardware_address_serialPRU(){
 
 
 int clear_pulse_count_sync(){
-        if(prudata[5]==0x00){     // Sync disabled. Clear pulse counting
-                prudata[80] = 0;
-                prudata[81] = 0;
-                prudata[82] = 0;
-                prudata[83] = 0;
-                return 0;
-        }
-        else
-                return -1;        // Error: not possible to clear pulse counting
-                                  // while sync operation is enabled.
+  if(prudata[5]==0x00){     // Sync disabled. Clear pulse counting
+    prudata[80] = 0;
+    prudata[81] = 0;
+    prudata[82] = 0;
+    prudata[83] = 0;
+    return 0;
+  }
+  else
+    return -1;        // Error: not possible to clear pulse counting
+                      // while sync operation is enabled.
 }
-
 
 
 
@@ -170,6 +168,7 @@ uint32_t read_pulse_count_sync(){
   counting = (prudata[83] << 24) + (prudata[82] << 16) + (prudata[81] << 8) + prudata[80];
   return counting;
 }
+
 
 
 void set_curve_pointer(uint32_t new_pointer){
@@ -182,11 +181,14 @@ void set_curve_pointer(uint32_t new_pointer){
   }
 }
 
+
+
 uint32_t read_curve_pointer(){
   uint32_t pointer = 0;
   pointer = ((prudata[13] << 24) + (prudata[12] << 16) + (prudata[11] << 8) + prudata[10])/16;
   return pointer;
 }
+
 
 
 int sync_status(){
@@ -263,6 +265,7 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
 }
 
 
+
 void set_sync_stop_PRU(){
   if(prudata[25]=='M')
     prudata[5] = 0x00;
@@ -270,13 +273,12 @@ void set_sync_stop_PRU(){
 }
 
 
+
 void close_PRU(){
   // ----- Desabilita PRU e fecha mapeamento da shared RAM
   prussdrv_pru_disable(PRU_NUM);
   prussdrv_exit();
 }
-
-
 
 
 
@@ -299,14 +301,14 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
   off_t target = DDR_address[0];
 
   if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
-    printf("Failed to open memory!");
+    // printf("Failed to open memory!");
     return -1;
   }
 
   map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
   if(map_base == (void *) -1) {
-    printf("Failed to map base address");
-    return -1;
+    // printf("Failed to map base address");
+    return -2;
   }
 
   uint32_t value1, value2, value3, value4 = 0;
@@ -424,16 +426,17 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
   }
 
     if(munmap(map_base, MAP_SIZE) == -1) {
-      printf("Failed to unmap memory");
-         return -1;
+      // printf("Failed to unmap memory");
+      return -3;
     }
 
   close(fd);
 
-  printf("%d-point curve successfully loaded.\n", CurvePoints);
+  // printf("%d-point curve successfully loaded.\n", CurvePoints);
 
   return 0;
 }
+
 
 
 void set_curve_block(uint8_t block){
@@ -455,6 +458,7 @@ void set_curve_block(uint8_t block){
 }
 
 
+
 uint8_t read_curve_block(){
   unsigned int DDR_address[2], address;
   uint8_t block = 0;
@@ -471,6 +475,8 @@ uint8_t read_curve_block(){
   return block;
 }
 
+
+
 int init_start_PRU(int baudrate, char mode){
 
 
@@ -481,7 +487,7 @@ int init_start_PRU(int baudrate, char mode){
 
   // ----- Inicializacao da interrupcao PRU
   if (prussdrv_open(PRU_EVTOUT_1)){
-    printf("prussdrv_open open failed\n");
+    // printf("prussdrv_open open failed\n");
     return -1;
   }
   prussdrv_pruintc_init(&pruss_intc_initdata);
@@ -502,8 +508,8 @@ int init_start_PRU(int baudrate, char mode){
   else{
     // Modo nao existente
     close_PRU();
-    printf("Requested mode does not exist.\n");
-    return -1;
+    // printf("Requested mode does not exist.\n");
+    return -2;
   }
 
   // ----- Inicializacao: contador de sincronismo zerado
@@ -591,8 +597,8 @@ int init_start_PRU(int baudrate, char mode){
 
     default:
       close_PRU();    // Nao definido
-      printf("Baudrate not defined.\n");
-      return -1;
+      // printf("Baudrate not defined.\n");
+      return -3;
   }
   prudata[26] = one_byte_length_ns;
   prudata[27] = one_byte_length_ns >> 8;
@@ -624,6 +630,8 @@ int init_start_PRU(int baudrate, char mode){
 
   return 0;
 }
+
+
 
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
@@ -668,6 +676,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
   return 0;
 }
+
 
 
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
