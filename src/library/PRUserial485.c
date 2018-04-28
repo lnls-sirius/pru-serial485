@@ -58,7 +58,6 @@ Date: April/2018
 
 /* Return codes */
 
-<<<<<<< HEAD
 #define SYNC_OFF 0                 // sync_status
 #define SYNC_ON 1                  // sync_status
 #define OK 0
@@ -70,19 +69,6 @@ Date: April/2018
 #define ERR_INIT_PRU_MODE 6        // init_start_PRU
 #define ERR_INIT_PRU_BAUDR 7       // init_start_PRU
 #define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
-=======
-#define SYNC_OFF 0
-#define SYNC_ON 1
-#define OK 0
-#define ERR_CLEAR_PULSE 1
-#define ERR_LD_CURVE_MOPEN 2
-#define ERR_LD_CURVE_MMAP 3
-#define ERR_LD_CURVE_UMMAP 4
-#define ERR_INIT_PRU_SSDRV 5
-#define ERR_INIT_PRU_MODE 6
-#define ERR_INIT_PRU_BAUDR 7
-#define ERR_RECV_DATA_OLDMSG 8
->>>>>>> bd9997744e5e3fb24c42d5e3ad9f9df403685428
 
 
 
