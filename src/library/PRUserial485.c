@@ -258,7 +258,7 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
     prudata[5] = 0xff;
 
     // Aguarda início efetivo
-    while(sync_status() == 0)
+    while(sync_status() == 0);
 
   }  // if(prudata[25]=='M'){
 
