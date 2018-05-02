@@ -275,10 +275,8 @@ WAIT_SYNC:
 
 
 // Wait for sync pulse: Apenas borda de subida
-	CLR LED_READ
 	WBC SYNC
 	WBS SYNC
-	SET LED_READ
 
 // VERIFICA SE CICLAGEM - Se sim, pula para "SEND_SYNC"
 	ZERO    &I, 4
@@ -355,7 +353,7 @@ WAIT_TX_ZERO:
 	RECEIVE_SPI  8
 	CS_UP
 
-	QBGT	WAIT_TX_ZERO, BUFFER_SPI_IN, 0x08	// Aguarda Buffer TX < 8
+	QBLT	WAIT_TX_ZERO, BUFFER_SPI_IN, 0x08	// Aguarda Buffer TX < 8
 
 // VERIFICA SE CICLAGEM - Se sim, pula para "UPDATE_PULSE_COUNTING"
 	ZERO    &I, 4
@@ -422,9 +420,15 @@ END_OF_CURVE:
   QBEQ    END_CONTINUOUS_SEQ, I, 0x00  // Se I == 0,Sync_Continuous
 
 END_SINGLE_SEQ:
+// Disable sync mode
   ZERO    &I, 4
   ADD     I, I, DISABLED_SYNC
   SBCO    I, SHRAM_BASE, 5, 1
+
+// Says it wont wait for sync pulse
+  ZERO 	&I, 4
+  ADD I, I, SYNC_NOK
+  SBCO 	I,SHRAM_BASE,OFFSET_SHRAM_SYNC_OK,1
 
   JMP     DELAY_CONFIG
 
