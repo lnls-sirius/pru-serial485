@@ -139,7 +139,7 @@ _**Sync Operation**_
                  | 0x5E - Single curve sequence & Read messages at End of curve  
                  | 0xC1 - Continuous curve sequence & Intercalated read messages  
                  | 0xCE - Continuous curve sequence & Read messages at End of curve  
-                 | 0x5C - Single Sequence - Single CYCLING COMMAND  
+                 | 0x5B - Single Sequence - Single Broadcast Function command 
   * _delay:_  
   time between end of sync serial message and start of a normal message, when sending normal commands after sync pulses.
   * _sync_address:_  

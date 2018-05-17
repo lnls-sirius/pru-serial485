@@ -81,7 +81,7 @@
 #define SYNC_CONTINUOUS           0xC0
 #define SYNC_END                  0x0E
 #define SYNC_INTERCAL             0x01
-#define SYNC_CYCLING							0x0C
+#define SYNC_BROADCAST							0x0B
 #define ENABLED_SYNC               0xFF
 #define DISABLED_SYNC              0x00
 
@@ -235,11 +235,11 @@ OPERATION_MODE_MASTER:
 	ADD 	BLOCKS,BLOCKS,I					// Blocks: endereco do ultimo byte do comando
 
 
-// VERIFICA SE CICLAGEM - Se sim, pula para "WAIT_SYNC"
+// VERIFICA SE BROADCAST - Se sim, pula para "WAIT_SYNC"
 	ZERO    &I, 4
   LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_MODE, 1
 	AND			I, I, 0x0F
-	XOR     I, I, SYNC_CYCLING
+	XOR     I, I, SYNC_BROADCAST
   QBEQ    WAIT_SYNC, I, 0x00
 
 
@@ -278,11 +278,11 @@ WAIT_SYNC:
 	WBC SYNC
 	WBS SYNC
 
-// VERIFICA SE CICLAGEM - Se sim, pula para "SEND_SYNC"
+// VERIFICA SE BROADCAST - Se sim, pula para "SEND_SYNC"
 	ZERO    &I, 4
   LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_MODE, 1
 	AND			I, I, 0x0F
-	XOR     I, I, SYNC_CYCLING
+	XOR     I, I, SYNC_BROADCAST
   QBEQ    SEND_SYNC, I, 0x00
 
 
@@ -336,7 +336,7 @@ SEND_SYNC:
 	ZERO 	&I, 4
 	MOV	I,OFFSET_SHRAM_SYNC				// I: ponteiro para início dos dados - SHRAM[50]
 
-
+ 
 LOAD_FROM_MEMORY_SYNC:
 	ADD	I,I,1
 	LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1		// Carrega byte da shram
@@ -355,11 +355,11 @@ WAIT_TX_ZERO:
 
 	QBLT	WAIT_TX_ZERO, BUFFER_SPI_IN, 0x08	// Aguarda Buffer TX < 8
 
-// VERIFICA SE CICLAGEM - Se sim, pula para "UPDATE_PULSE_COUNTING"
+// VERIFICA SE BROADCAST - Se sim, pula para "UPDATE_PULSE_COUNTING"
 	ZERO    &I, 4
   LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_MODE, 1
 	AND			I, I, 0x0F
-	XOR     I, I, SYNC_CYCLING
+	XOR     I, I, SYNC_BROADCAST
   QBEQ    UPDATE_PULSE_COUNTING, I, 0x00
 
 
@@ -380,11 +380,11 @@ UPDATE_PULSE_COUNTING:
 
 
 
-// VERIFICA SE CICLAGEM - Se sim, pula para "END_SINGLE_SEQ"
+// VERIFICA SE BROADCAST - Se sim, pula para "END_SINGLE_SEQ"
 	ZERO    &I, 4
   LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_MODE, 1
 	AND			I, I, 0x0F
-	XOR     I, I, SYNC_CYCLING
+	XOR     I, I, SYNC_BROADCAST
   QBEQ    END_SINGLE_SEQ, I, 0x00
 
 
