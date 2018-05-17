@@ -120,7 +120,7 @@ int sync_status();
  *             | 0x5E - Single curve sequence & Read messages at End of curve
  *             | 0xC1 - Continuous curve sequence & Intercalated read messages
  *             | 0xCE - Continuous curve sequence & Read messages at End of curve
- *             | 0x5C - Single Sequence - Single CYCLING COMMAND
+ *             | 0x5B - Single Sequence - Single Broadcast Function command
  * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
  * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5C
  * Sinaliza o inicio do procedimento sincrono via PRU

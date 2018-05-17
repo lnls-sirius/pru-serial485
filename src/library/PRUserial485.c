@@ -83,7 +83,7 @@ Date: April/2018
  *        | 0x5E - Single curve sequence & Read messages at End of curve
  *        | 0xC1 - Continuous curve sequence & Intercalated read messages
  *        | 0xCE - Continuous curve sequence & Read messages at End of curve
- *        | 0x5C - Single Sequence - Single CYCLING COMMAND
+ *        | 0x5B - Single Sequence - Single Broadcast Function command
  *
  *
  * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
@@ -205,8 +205,8 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
     uint32_t delay_ns = delay_us * 1000;
 
 
-    // ----- Instrucao - Sync - Ciclagem
-    if(sync_mode == 0x5C){
+    // ----- Instrucao - Sync - Broadcast function
+    if(sync_mode == 0x5B){
       prudata[50] = 0x06;       // Tamanho
       prudata[51] = 0xff;       // | Endereco broadcast
       prudata[52] = 0x50;       // |
