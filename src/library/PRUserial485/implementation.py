@@ -43,9 +43,37 @@ C4_buffer = (ctypes.c_float * 262144)()
 data_size = ctypes.c_uint32(0)
 
 
+class ConstReturn:
+    """Namespace for return constants."""
+
+    SYNC_OFF = 0  # sync_status
+    SYNC_ON = 1  # sync_status
+    OK = 0
+    ERR_CLEAR_PULSE = 1  # clear_pulse_count_sync
+    ERR_LD_CURVE_MOPEN = 2  # loadCurve
+    ERR_LD_CURVE_MMAP = 3  # loadCurve
+    ERR_LD_CURVE_UMMAP = 4  # loadCurve
+    ERR_INIT_PRU_SSDRV = 5  # init_start_PRU
+    ERR_INIT_PRU_MODE = 6  # init_start_PRU
+    ERR_INIT_PRU_BAUDR = 7  # init_start_PRU
+    ERR_RECV_DATA_OLDMSG = 8  # recv_data_PRU
+
+
+class ConstSyncMode:
+    """Namespace for PRU sync modes."""
+
+    MIGINT = 0x51  # Single curve sequence & Read msgs at End of curve
+    MIGEND = 0x5E  # Single curve sequence & Read msgs at End of curve
+    RMPINT = 0xC1  # Contin. curve sequence & Intercalated read messages
+    RMPEND = 0xCE  # Contin. curve sequence & Read msgs at End of curve
+    CYCLE = 0x5C   # Single Sequence - Single CYCLING COMMAND
+    ALL = (MIGINT, MIGEND, RMPINT, RMPEND, CYCLE)
+
+
 def PRUserial485_open(baudrate, mode):
     """Procedimento de inicialização da PRU."""
-    libPRUserial485.init_start_PRU(baudrate, ctypes.c_char(mode))
+    ret = libPRUserial485.init_start_PRU(baudrate, ctypes.c_char(mode))
+    return ret
 
 
 def PRUserial485_curve(curve1, curve2, curve3, curve4, block):
@@ -56,11 +84,12 @@ def PRUserial485_curve(curve1, curve2, curve3, curve4, block):
             C2_buffer[i] = curve2[i]
             C3_buffer[i] = curve3[i]
             C4_buffer[i] = curve4[i]
-        libPRUserial485.loadCurve(ctypes.byref(C1_buffer),
-                                  ctypes.byref(C2_buffer),
-                                  ctypes.byref(C3_buffer),
-                                  ctypes.byref(C4_buffer),
-                                  len(curve1), block)
+        ret = libPRUserial485.loadCurve(ctypes.byref(C1_buffer),
+                                        ctypes.byref(C2_buffer),
+                                        ctypes.byref(C3_buffer),
+                                        ctypes.byref(C4_buffer),
+                                        len(curve1), block)
+        return ret
     else:
         raise ValueError("Erro: Curvas nao tem o mesmo tamanho!")
 
@@ -94,9 +123,10 @@ def PRUserial485_write(request, reply_timeout):
         data_buffer[i] = ord(request[i])
         i += 1
     data_size.value = len(request)
-    libPRUserial485.send_data_PRU(ctypes.byref(data_buffer),
-                                  ctypes.byref(data_size),
-                                  ctypes.c_float(reply_timeout))
+    ret = libPRUserial485.send_data_PRU(ctypes.byref(data_buffer),
+                                        ctypes.byref(data_size),
+                                        ctypes.c_float(reply_timeout))
+    return ret
 
 
 def PRUserial485_read():
