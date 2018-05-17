@@ -170,9 +170,9 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
  *				| 0x5E - Single curve sequence & Read messages at End of curve
  *				| 0xC1 - Continuous curve sequence & Intercalated read messages
  *				| 0xCE - Continuous curve sequence & Read messages at End of curve
- *               | 0x5C - Single Sequence - Single CYCLING COMMAND
+ *               | 0x5B - Single Broadcast - Single Broadcast Function
  * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
- * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5C
+ * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5B
  * Sinaliza o inicio do procedimento sincrono via PRU
 */
 void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address);
