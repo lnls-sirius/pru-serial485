@@ -66,8 +66,8 @@ class ConstSyncMode:
     MIGEND = 0x5E  # Single curve sequence & Read msgs at End of curve
     RMPINT = 0xC1  # Contin. curve sequence & Intercalated read messages
     RMPEND = 0xCE  # Contin. curve sequence & Read msgs at End of curve
-    CYCLE = 0x5C   # Single Sequence - Single CYCLING COMMAND
-    ALL = (MIGINT, MIGEND, RMPINT, RMPEND, CYCLE)
+    BRDCST = 0x5B  # Single Sequence - Single Broadcast Function command
+    ALL = (MIGINT, MIGEND, RMPINT, RMPEND, BRDCST)
 
 
 def PRUserial485_open(baudrate, mode):
