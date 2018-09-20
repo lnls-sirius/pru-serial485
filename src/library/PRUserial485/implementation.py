@@ -70,6 +70,15 @@ class ConstSyncMode:
     ALL = (MIGINT, MIGEND, RMPINT, RMPEND, BRDCST)
 
 
+class ConstSyncMode:
+    """Namespace for PRU sync PS types."""
+
+    PS_FBP = 0x00  # FBP - Setpoint x4
+    PS_FAC = 0x01  # FAC - Setpoint x1
+    ALL = (PS_FBP, PS_FAC)
+
+
+
 def PRUserial485_open(baudrate, mode):
     """Procedimento de inicialização da PRU."""
     ret = libPRUserial485.init_start_PRU(baudrate, ctypes.c_char(mode))
@@ -145,9 +154,9 @@ def PRUserial485_read():
         return(answer)
 
 
-def PRUserial485_sync_start(sync_mode, delay, sync_address=0x00):
+def PRUserial485_sync_start(sync_mode, delay, sync_address=0x00, ps_type=0x00, timeout = False):
     """Inicia operação em modo síncrono."""
-    libPRUserial485.set_sync_start_PRU(sync_mode, delay, sync_address)
+    libPRUserial485.set_sync_start_PRU(sync_mode, delay, sync_address, ps_type, int(timeout))
 
 
 def PRUserial485_sync_stop():

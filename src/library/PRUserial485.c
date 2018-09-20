@@ -20,14 +20,19 @@ Date: April/2018
 
 
 
-#define PRU_NUM             1
-#define PRU_BINARY          "/usr/bin/PRUserial485.bin"
+#define PRU_485             1
+#define PRU_TIMEOUT         0
+#define PRU_485_BINARY      "/usr/bin/PRUserial485.bin"
+#define PRU_TIMEOUT_BINARY      "/usr/bin/timing.bin"
 #define OFFSET_SHRAM_WRITE  0x64    // 100 general purpose bytes
 #define OFFSET_SHRAM_READ   0x1800  //
 
 #define MENSAGEM_ANTIGA         0x55
 #define MENSAGEM_RECEBIDA_NOVA  0x00
 #define MENSAGEM_PARA_ENVIAR    0xff
+
+#define PS_FBP 0
+#define PS_FAC 1
 
 #define GPIO_DATAOUT 0x13C
 #define GPIO_DATAIN  0x138
@@ -84,6 +89,15 @@ Date: April/2018
  *        | 0xC1 - Continuous curve sequence & Intercalated read messages
  *        | 0xCE - Continuous curve sequence & Read messages at End of curve
  *        | 0x5B - Single Sequence - Single Broadcast Function command
+ * prudata[86] = ps_type
+ *                  0x00 for FBP
+ *                  0x01 for FAC
+ * prudata[87] = Enable Sync Timeout
+ *                  0x00 for Disabled
+ *                  0xff for Enabled
+ * prudata[88] = Sync Pulse Received
+ *                  0x00 for no receive
+ *                  0xff for new pulse received
  *
  *
  * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
@@ -197,13 +211,14 @@ int sync_status(){
 
 
 
-void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address){
+void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address, uint8_t ps_type, uint8_t timeout){
   if(prudata[25]=='M'){
     clear_pulse_count_sync();
     set_curve_pointer(0);
 
     uint32_t delay_ns = delay_us * 1000;
 
+    printf("PS TYPE %d\n", ps_type);
 
     // ----- Instrucao - Sync - Broadcast function
     if(sync_mode == 0x5B){
@@ -214,15 +229,28 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
       prudata[54] = 0x01;       // | apos pulso de sync
       prudata[55] = 0x0f;       // |
       prudata[56] = 0xa1;       // |
+      printf("BCST type\n");
     }
-    // ----- Instrucao - Sync - SetIx4
-    else {
+
+    // ----- Instrucao - Sync - SetSlowRefx4
+    if((ps_type == PS_FBP) & (sync_mode != 0x5B)){
       prudata[50] = 0x16;          // Tamanho
       prudata[51] = sync_address;  // | Endereco do controlador que respondera ao sync
       prudata[52] = 0x50;          // |
       prudata[53] = 0x00;          // | Comando a ser enviado
       prudata[54] = 0x11;          // | apos pulso de sync
       prudata[55] = 0x11;          // |
+      printf("FBP type\n");
+    }
+    // ----- Instrucao - Sync - SetSlowRef
+    if((ps_type == PS_FAC) & (sync_mode != 0x5B)){
+      prudata[50] = 0x0a;          // Tamanho
+      prudata[51] = sync_address;  // | Endereco do controlador que respondera ao sync
+      prudata[52] = 0x50;          // |
+      prudata[53] = 0x00;          // | Comando a ser enviado
+      prudata[54] = 0x05;          // | apos pulso de sync
+      prudata[55] = 0x10;          // |
+      printf("FAC type\n");
     }
 
 
@@ -247,6 +275,19 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
     // 0xCE - Continuous curve sequence & Read messages at End of curve
     prudata[85] = sync_mode;
 
+    // Tipo de fonte
+    // 0x00 - FBP
+    // 0x01 - FAC
+    prudata[86] = ps_type;
+
+    // Enable Sync Timeout
+    // 0x00 - Disabled
+    // 0xff - Enabled
+    if(timeout){
+        prudata[87] = 0xff;
+        printf("Timeout enabling");
+    }
+
     // Inicio modo sincrono
     prudata[5] = 0xff;
 
@@ -260,16 +301,21 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
 
 
 void set_sync_stop_PRU(){
-  if(prudata[25]=='M')
+  if(prudata[25]=='M'){
+    // Disable sync mode
     prudata[5] = 0x00;
-    prussdrv_exec_program(PRU_NUM, PRU_BINARY);
+    // Disable Sync timeout
+    prudata[87] = 0x00;
+    prussdrv_exec_program(PRU_485, PRU_485_BINARY);
+    prussdrv_exec_program(PRU_TIMEOUT, PRU_TIMEOUT_BINARY);
+  }
 }
 
 
 
 void close_PRU(){
   // ----- Desabilita PRU e fecha mapeamento da shared RAM
-  prussdrv_pru_disable(PRU_NUM);
+  prussdrv_pru_disable(PRU_485);
   prussdrv_exit();
 }
 
@@ -618,7 +664,9 @@ int init_start_PRU(int baudrate, char mode){
 
 
   // ----- Executar codigo na PRU
-  prussdrv_exec_program (PRU_NUM, PRU_BINARY);
+  prussdrv_exec_program (PRU_485, PRU_485_BINARY);
+  prussdrv_exec_program(PRU_TIMEOUT, PRU_TIMEOUT_BINARY);
+
 
 
   return OK;

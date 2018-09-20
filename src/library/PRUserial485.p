@@ -11,6 +11,9 @@
 #define OFFSET_SHRAM_SYNC_DELAY		29		    // Time between sync and normal command
 #define OFFSET_SHRAM_SYNC_OK			0x54		// 84 - Sync OK
 #define OFFSET_SHRAM_SYNC_MODE			0x55		// 85 - Sync Mode
+#define OFFSET_SHRAM_PS_TYPE			0x56		// 86 - PS type (FBP or FAC)
+#define OFFSET_SHRAM_SYNC_TIMEOUT       0x57        // 87 - Enable sync timeout
+#define OFFSET_SHRAM_SYNC_RECEIVED      0x58        // 88 - Sync Pulse Received
 
 #define OFFSET_SEND_COMMAND			0x69
 
@@ -84,6 +87,10 @@
 #define SYNC_BROADCAST							0x0B
 #define ENABLED_SYNC               0xFF
 #define DISABLED_SYNC              0x00
+#define SYNC_PULSE_RECEIVED        0xFF
+#define SYNC_PULSE_NOT_RECEIVED     0x00
+#define PS_FBP                      0x00
+#define PS_FAC                      0x01
 
 
 
@@ -278,6 +285,12 @@ WAIT_SYNC:
 	WBC SYNC
 	WBS SYNC
 
+// Update PULSE_RECEIVED Register
+    ZERO    &I, 4
+    ADD     I, I, SYNC_PULSE_RECEIVED
+    SBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_RECEIVED, 1
+
+
 // VERIFICA SE BROADCAST - Se sim, pula para "SEND_SYNC"
 	ZERO    &I, 4
   LBCO    I, SHRAM_BASE, OFFSET_SHRAM_SYNC_MODE, 1
@@ -304,6 +317,13 @@ POINTS_CURVE:
 	SBCO 	BUFFER_SPI_OUT,SHRAM_BASE,56,4
 	ADD	DDR_POINTER,DDR_POINTER,4
 
+GET_PS_TYPE:
+    ZERO    &I, 4
+    LBCO    I, SHRAM_BASE, OFFSET_SHRAM_PS_TYPE, 1
+    XOR     I, I, PS_FAC
+    QBEQ    SYNC_FAC, I, 0x00
+
+// Continues here if PS_TYPE == FBP
 	LBBO	BUFFER_SPI_OUT, DDR_BASE, DDR_POINTER, 4
 	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b0
 	SUB	CHECKSUM_POINT,CHECKSUM_POINT,BUFFER_SPI_OUT.b1
@@ -329,6 +349,13 @@ POINTS_CURVE:
 	ADD	DDR_POINTER,DDR_POINTER,4
 
 	SBCO	CHECKSUM_POINT,SHRAM_BASE,72,1
+    JMP SEND_SYNC
+
+// Continues here if PS_TYPE == PS_FAC
+SYNC_FAC:
+    ADD	DDR_POINTER, DDR_POINTER, 12
+    SBCO	CHECKSUM_POINT,SHRAM_BASE,60,1
+    JMP SEND_SYNC
 
 
 //	Envia comando de sincronismo
@@ -336,7 +363,7 @@ SEND_SYNC:
 	ZERO 	&I, 4
 	MOV	I,OFFSET_SHRAM_SYNC				// I: ponteiro para início dos dados - SHRAM[50]
 
- 
+
 LOAD_FROM_MEMORY_SYNC:
 	ADD	I,I,1
 	LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1		// Carrega byte da shram

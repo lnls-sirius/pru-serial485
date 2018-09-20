@@ -36,6 +36,8 @@ Date: April/2018
 #define ERR_INIT_PRU_MODE 6        // init_start_PRU
 #define ERR_INIT_PRU_BAUDR 7       // init_start_PRU
 #define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
+#define PS_FBP 0
+#define PS_FAC 1
 
 
 
@@ -123,9 +125,11 @@ int sync_status();
  *             | 0x5B - Single Sequence - Single Broadcast Function command
  * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
  * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5B
+ * ps_type: FBP = 0; FAC = 1 (define o comando de setpoint (slowrefx4 ou slowref))
+ * timeout: 0 ou 1 - Define se haverá tempo de timeout de fim de curva
  * Sinaliza o inicio do procedimento sincrono via PRU
 */
-void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address);
+void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address, uint8_t ps_type, uint8_t timeout);
 
 
 
