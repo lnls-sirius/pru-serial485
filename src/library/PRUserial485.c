@@ -46,7 +46,7 @@ Date: April/2018
 #define CURVE_BYTES_PER_BLOCK      100000
 #define CURVE_MAX_POINTS_PER_BLOCK CURVE_BYTES_PER_BLOCK/16
 
-#define MAP_SIZE 0x0FFFFFFF
+AS-Glob:TI-EVG:DevEnbl-Sts#define MAP_SIZE 0x0FFFFFFF
 #define MAP_MASK (MAP_SIZE)
 
 
@@ -57,7 +57,7 @@ Date: April/2018
  * SHRAM[0]~SHRAM[49] - General Purpose
  *
  * prudata[0] = versao MAX3107 (0x1a)
- * prudata[1] = Status: dados para enviar (0xFF) / dados para ler (0x00) / dados antigos (0x55)
+ * prudata[1] = Status: dados para enviar (0xFF) / dados para ler (0x00) / dados antigos (0xAS-Glob:TI-EVG:DevEnbl-Sts55)
  * prudata[2] = Baudrate (BRGCONFIG)
  * prudata[3] = Baudrate (DIVLSB)
  * prudata[4] = Baudrate (DIVMSB)
@@ -84,7 +84,7 @@ Date: April/2018
  *        | 0xC1 - Continuous curve sequence & Intercalated read messages
  *        | 0xCE - Continuous curve sequence & Read messages at End of curve
  *        | 0x5B - Single Sequence - Single Broadcast Function command
- *
+ *AS-Glob:TI-EVG:DevEnbl-Sts
  *
  * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
  *
@@ -170,7 +170,7 @@ void set_curve_pointer(uint32_t new_pointer){
   prudata[12] = (16*new_pointer) >> 16;  // Byte do new_pointer [23..16]
   prudata[13] = (16*new_pointer) >> 24;  // MSByte do new_pointer [31..24]
 
-  while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != new_pointer){
+  while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != 16*new_pointer){
   }
 }
 
