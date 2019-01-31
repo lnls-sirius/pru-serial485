@@ -170,7 +170,7 @@ void set_curve_pointer(uint32_t new_pointer){
   prudata[12] = (16*new_pointer) >> 16;  // Byte do new_pointer [23..16]
   prudata[13] = (16*new_pointer) >> 24;  // MSByte do new_pointer [31..24]
 
-  while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != new_pointer){
+  while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != 16*new_pointer){
   }
 }
 
