@@ -1,6 +1,7 @@
 *.swp
-
+*.pyc
 src/library/build/
 src/library/dist/
 src/library/PRUserial485.egg-info/
 src/library/PRUserial485/__pycache__/
+src/library/VERSION-HASH

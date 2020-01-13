@@ -7,8 +7,8 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
-#include <PRUserial485.h>
 #include <prussdrv.h>
+#include <PRUserial485.h>
 
 PyObject* pru_open(PyObject* self, PyObject *args)
 {
@@ -44,7 +44,7 @@ PyObject* pru_send(PyObject* self, PyObject *args)
 
     data = (uint8_t *)malloc(data_size);
 
-    for(int i=0; i<data_size; i++)
+    for(uint32_t i=0; i<data_size; i++)
     {
         data[i]=str_input[i];
     }
@@ -73,26 +73,39 @@ static PyObject* pru_address(PyObject* self, PyObject *args)
 }
 
 
+static PyObject* pru_version(PyObject* self, PyObject *args)
+{
+    FILE* fp;
+    char data[50];
+
+    fp = fopen("VERSION-HASH", "r");
+    fscanf(fp, "%s", data);
+    fclose(fp);
+    return Py_BuildValue("s", data);
+}
+
+
 
 static PyMethodDef pruserial485_funcs[] = {
-     {"open", (PyCFunction)pru_open,      METH_VARARGS, NULL},
-     {"close", (PyCFunction)pru_close,      METH_VARARGS, NULL},
-     {"address", (PyCFunction)pru_address,      METH_VARARGS, NULL},
-     {"write", (PyCFunction)pru_send,      METH_VARARGS, NULL},
-     {"read", (PyCFunction)pru_recv,      METH_VARARGS, NULL},
+     {"PRUserial485_open", (PyCFunction)pru_open,      METH_VARARGS, NULL},
+     {"PRUserial485_close", (PyCFunction)pru_close,      METH_VARARGS, NULL},
+     {"PRUserial485_address", (PyCFunction)pru_address,      METH_VARARGS, NULL},
+     {"PRUserial485_write", (PyCFunction)pru_send,      METH_VARARGS, NULL},
+     {"PRUserial485_read", (PyCFunction)pru_recv,      METH_VARARGS, NULL},
+     {"__version__", (PyCFunction)pru_version,      METH_VARARGS, NULL},
      {NULL}
 };
 
 
 static struct PyModuleDef cModPyDem = {
     PyModuleDef_HEAD_INIT,
-    "prucon", /* name of module */
+    "PRUserial485", /* name of module */
     "",          /* module documentation, may be NULL */
     -1,          /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
     pruserial485_funcs
 };
 
-PyMODINIT_FUNC PyInit_prucon(void)
+PyMODINIT_FUNC PyInit_PRUserial485(void)
 {
     return PyModule_Create(&cModPyDem);
 }

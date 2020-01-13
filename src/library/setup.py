@@ -1,4 +1,15 @@
 from distutils.core import setup, Extension
-setup(name='prucon', version='1.0',  \
-      ext_modules=[Extension('prucon', sources=['libpc.c'], include_dirs = ['/usr/include'],
-                    libraries = ['PRUserial485','prussdrv','python3'])])
+import os as _os
+
+_os.system("(cat VERSION && echo ':' && git log --format=%h -1) | tr -d '\n' > VERSION-HASH")
+
+with open('VERSION-HASH','r') as _f:
+    __version__ = _f.read().strip()
+
+
+setup(  name            = 'PRUserial485',
+        version         = __version__,
+        ext_modules=[Extension('PRUserial485',
+                                sources=['libPRUserial485.c'],
+                                include_dirs = ['/usr/include'],
+                                libraries = ['PRUserial485','prussdrv','python3'])])
