@@ -95,7 +95,7 @@ static PyObject* pru_address(PyObject* self, PyObject *args)
 // ------------------------------------------------------------------------------------------------
 static PyObject* pru_version(PyObject* self, PyObject *args)
 {
-    return Py_BuildValue("s", VERSION-HASH);
+    return Py_BuildValue("s", VERSIONHASH);
 }
 
 
