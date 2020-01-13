@@ -1,15 +1,23 @@
+// ------------------------------------------------------------------------------------------------
+// Python Module for PRUserial485 Interface
+//
+// Mapping .c functions into Python methods in order to ease code development without losing
+// performance.
+//
+// CONTROLS GROUP
+// Author: Patricia Nallin (patricia.nallin@lnls.br)
+// Release Date: Jan 13, 2020
+//
+// ------------------------------------------------------------------------------------------------
+
 #include <Python.h>
-#include <stdint.h>
-#include <unistd.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <getopt.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <linux/types.h>
 #include <prussdrv.h>
 #include <PRUserial485.h>
 
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_open(int baudrate, char mode) -> int init_start_PRU(int baudrate, char mode)
+// ------------------------------------------------------------------------------------------------
 PyObject* pru_open(PyObject* self, PyObject *args)
 {
  	int br;
@@ -23,12 +31,18 @@ PyObject* pru_open(PyObject* self, PyObject *args)
     return Py_BuildValue("i", init_start_PRU(br,mode));
 }
 
+// ------------------------------------------------------------------------------------------------
+// void PRUserial485_close() -> void close_PRU()
+// ------------------------------------------------------------------------------------------------
 PyObject* pru_close(PyObject* self, PyObject *args)
 {
     close_PRU();
      return Py_BuildValue("s", NULL);
 }
 
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_write(bytes/bytearray, float timeout) -> int send_data_PRU(char array, uint32 length, float timeout)
+// ------------------------------------------------------------------------------------------------
 PyObject* pru_send(PyObject* self, PyObject *args)
 {
     float timeout;
@@ -55,7 +69,9 @@ PyObject* pru_send(PyObject* self, PyObject *args)
     return Py_BuildValue("i", res);
 }
 
-
+// ------------------------------------------------------------------------------------------------
+// bytes PRUserial485_read() -> int recv_data_PRU(char array, uint32 length)
+// ------------------------------------------------------------------------------------------------
 PyObject* pru_recv(PyObject* self, PyObject *args)
 {
     uint32_t data_size;
@@ -66,19 +82,28 @@ PyObject* pru_recv(PyObject* self, PyObject *args)
     return Py_BuildValue("y#", data, data_size);
 }
 
-
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_address() -> int hardware_address_serialPRU()
+// ------------------------------------------------------------------------------------------------
 static PyObject* pru_address(PyObject* self, PyObject *args)
 {
         return Py_BuildValue("i", hardware_address_serialPRU());
 }
 
-
+// ------------------------------------------------------------------------------------------------
+// str __version__()
+// ------------------------------------------------------------------------------------------------
 static PyObject* pru_version(PyObject* self, PyObject *args)
 {
     return Py_BuildValue("s", VERSION-HASH);
 }
 
 
+
+
+// ------------------------------------------------------------------------------------------------
+// Python Module definitions, methods and initialization
+// ------------------------------------------------------------------------------------------------
 
 static PyMethodDef pruserial485_funcs[] = {
      {"PRUserial485_open", (PyCFunction)pru_open,      METH_VARARGS, NULL},
@@ -90,12 +115,11 @@ static PyMethodDef pruserial485_funcs[] = {
      {NULL}
 };
 
-
 static struct PyModuleDef cModPyDem = {
     PyModuleDef_HEAD_INIT,
-    "PRUserial485", /* name of module */
-    "",          /* module documentation, may be NULL */
-    -1,          /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
+    "PRUserial485",
+    "",          /* module documentation */
+    -1,
     pruserial485_funcs
 };
 
