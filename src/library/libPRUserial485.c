@@ -75,13 +75,7 @@ static PyObject* pru_address(PyObject* self, PyObject *args)
 
 static PyObject* pru_version(PyObject* self, PyObject *args)
 {
-    FILE* fp;
-    char data[50];
-
-    fp = fopen("VERSION-HASH", "r");
-    fscanf(fp, "%s", data);
-    fclose(fp);
-    return Py_BuildValue("s", data);
+    return Py_BuildValue("s", VERSION-HASH);
 }
 
 
