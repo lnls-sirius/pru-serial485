@@ -336,7 +336,7 @@ SEND_SYNC:
 	ZERO 	&I, 4
 	MOV	I,OFFSET_SHRAM_SYNC				// I: ponteiro para início dos dados - SHRAM[50]
 
- 
+
 LOAD_FROM_MEMORY_SYNC:
 	ADD	I,I,1
 	LBCO	BUFFER_SPI_OUT, SHRAM_BASE, I, 1		// Carrega byte da shram
@@ -878,6 +878,7 @@ DATA_READY_SLAVE:
 
     MOV     I, MENSAGEM_RECEBIDA_NOVA       // Confirma Dados Recebidos prudata[1]=0x00
 	SBCO	I, SHRAM_BASE, 1, 1
+    MOV 	r31.b0, PRU0_ARM_INTERRUPT+16
 
 	JMP		START_SLAVE
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::

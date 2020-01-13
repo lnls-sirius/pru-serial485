@@ -14,9 +14,11 @@ Author: Patricia HENRIQUES NALLIN
 Date: April/2018
 */
 
-# include "PRUserial485.h"
+#include "PRUserial485.h"
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <pthread.h>
+#include <signal.h>
 
 
 
@@ -100,9 +102,15 @@ Date: April/2018
  */
 
 
+ #define BUFF_SIZE 10000
 
-volatile uint8_t* prudata;
-size_t i;
+ volatile uint8_t* prudata;
+ volatile uint8_t receive_buffer[BUFF_SIZE];
+ volatile uint16_t pru_pointer = 0, read_pointer = 0;
+ volatile pthread_t tid = 0;
+ volatile uint8_t thread_control = 0;
+ size_t i;
+
 
 
 
@@ -269,6 +277,9 @@ void set_sync_stop_PRU(){
 
 void close_PRU(){
   // ----- Desabilita PRU e fecha mapeamento da shared RAM
+  thread_control = 0;
+  pthread_join(tid,NULL);
+  tid = 0;
   prussdrv_pru_disable(PRU_NUM);
   prussdrv_exit();
 }
@@ -470,6 +481,47 @@ uint8_t read_curve_block(){
 
 
 
+void *monitorSlaveMode(void *arg){
+    while(thread_control){
+        // ----- Aguarda sinal de finalizacao do ciclo
+        if(prudata[25] == "M"){
+        prussdrv_pru_wait_event(PRU_EVTOUT_1);
+        prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+        }
+        else{
+        prussdrv_pru_wait_event(PRU_EVTOUT_0);
+        prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
+        }
+
+
+        // ----- Nova mensagem recebida !
+            while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){}
+
+            if(prudata[1] == MENSAGEM_RECEBIDA_NOVA){
+            // ----- Copia dos dados recebidos
+            uint32_t tamanho = 0;
+
+            // ----- Copia dos dados recebidos
+            // Tamanho
+            for(i=0; i<4; i++)
+            tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+            // Dados
+            for(i=0; i<tamanho; i++){
+                receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+i];
+                pru_pointer++;
+                // Reset pru_pointer
+                if(pru_pointer == BUFF_SIZE){
+                    pru_pointer = 0;
+                }
+            }
+            // ----- Sinaliza mensagem antiga
+            prudata[1] = MENSAGEM_ANTIGA;
+        }
+    }
+}
+
+
+
 int init_start_PRU(int baudrate, char mode){
 
 
@@ -480,6 +532,10 @@ int init_start_PRU(int baudrate, char mode){
 
   // ----- Inicializacao da interrupcao PRU
   if (prussdrv_open(PRU_EVTOUT_1)){
+    // printf("prussdrv_open open failed\n");
+    return ERR_INIT_PRU_SSDRV;
+  }
+  if (prussdrv_open(PRU_EVTOUT_0)){
     // printf("prussdrv_open open failed\n");
     return ERR_INIT_PRU_SSDRV;
   }
@@ -621,6 +677,21 @@ int init_start_PRU(int baudrate, char mode){
   prussdrv_exec_program (PRU_NUM, PRU_BINARY);
 
 
+  // ----- Se modo slave, lanca thread para monitorar recebimento de dados
+  if(prudata[25]=='S'){
+      if(tid == 0){
+          thread_control = 1;
+          pthread_create(&tid, NULL, monitorSlaveMode, NULL);
+      }
+
+  }
+  if(prudata[25]=='M'){
+      thread_control = 0;
+      pthread_join(tid,NULL);
+      tid = 0;
+  }
+
+
   return OK;
 }
 
@@ -659,9 +730,32 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
   // ----- Aguarda sinal de finalizacao do ciclo
   prussdrv_pru_wait_event(PRU_EVTOUT_1);
-
-  // ----- Clear evento
   prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+
+
+  if(prudata[25]=='M'){
+      // Aguarda dados prontos na Shared RAM
+
+      while(prudata[1] != 0x00){
+      }
+
+      uint32_t tamanho = 0;
+
+      // ----- Copia dos dados recebidos
+      // Tamanho
+      for(i=0; i<4; i++)
+        tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+
+      // Dados
+      for(i=0; i<tamanho; i++){
+        receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+i];
+        pru_pointer++;
+        // Reset pru_pointer
+        if(pru_pointer == BUFF_SIZE){
+            pru_pointer = 0;
+        }
+      }
+  }
 
   // ----- SLAVE: Aguarda fim de envio
   if(prudata[25]=='S')
@@ -672,28 +766,60 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
 
 
-int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
-  // ---------- MASTER MODE ----------
-  if(prudata[25]=='M'){
-    // Aguarda dados prontos na Shared RAM
-    while(prudata[1] != 0x00){
+int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read){
+    // ---------- MASTER MODE ----------
+    //  if(prudata[25]=='M'){
+    if(pru_pointer == read_pointer){
+        *tamanho = 0;
+        return OK;
     }
 
-    *tamanho = 0;
+    if (pru_pointer > read_pointer){
+        *tamanho = pru_pointer - read_pointer;
+    }
+    else{
+        *tamanho = BUFF_SIZE - (read_pointer - pru_pointer);
+    }
 
-    // ----- Copia dos dados recebidos
-    // Tamanho
-    for(i=0; i<4; i++)
-      *tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
-    // Dados
-    for(i=0; i<*tamanho; i++)
-      data[i] = prudata[OFFSET_SHRAM_READ+4+i];
+    if(bytes2read != 0 & *tamanho > bytes2read)
+    {
+        *tamanho = bytes2read;
+    }
 
+    for(i=0; i<*tamanho; i++){
+        data[i] = receive_buffer[read_pointer];
+        read_pointer++;
+        // Reset pointer
+        if(read_pointer == BUFF_SIZE){
+            read_pointer = 0;
+        }
+
+    }
     return OK;
-  }
+}
+
+
+    /*
+    // Aguarda dados prontos na Shared RAM
+    while(prudata[1] != 0x00){
+}
+
+*tamanho = 0;
+
+// ----- Copia dos dados recebidos
+// Tamanho
+for(i=0; i<4; i++)
+*tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+// Dados
+for(i=0; i<*tamanho; i++)
+data[i] = prudata[OFFSET_SHRAM_READ+4+i];
+*/
+
+
 
 
   // ---------- SLAVE MODE ----------
+  /*
   if(prudata[25]=='S'){
 
     // ----- Nova mensagem recebida !
@@ -719,4 +845,5 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho){
     if(prudata[1] == MENSAGEM_ANTIGA)
       return ERR_RECV_DATA_OLDMSG;
   }
-}
+
+}*/

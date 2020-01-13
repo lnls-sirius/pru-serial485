@@ -129,10 +129,11 @@ def PRUserial485_write(request, reply_timeout):
     return ret
 
 
-def PRUserial485_read():
+def PRUserial485_read(bytes2read=0):
     """Recebe dados através da interface serial."""
     recv_ok = libPRUserial485.recv_data_PRU(ctypes.byref(data_buffer),
-                                            ctypes.byref(data_size))
+                                            ctypes.byref(data_size),
+                                            bytes2read)
     answer = []
     i = 0
     while (i < data_size.value):
