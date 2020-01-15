@@ -24,7 +24,7 @@ _**Before using it**_
 
 1. Apply the Device Tree Overlay (DTO) to configure Beaglebone pins to PRU. Run `overlay.sh` script each time you restart your Beaglebone.
 
-2. In your python code, you can just:
+2. In your python3 code, you can just:
 ```python
 import PRUserial485
 ```  
@@ -58,13 +58,13 @@ _**General Purpose**_
    Closes PRUs and memory mapping.
 
 
-- ```PRUserial485_write(char_list data, float timeout)```
+- ```PRUserial485_write(bytes, float timeout)```
 
    Sending data through RS485 network  
 
    _*Parameters*_
   * _data:_  
-  Python char list containing values to be transmitted through serial network.
+  Python bytes containing values to be transmitted through serial network.
   * _timeout:_  
   Maximum waiting time to start getting an answer, in milliseconds (ms). Minimum: 15ns / Maximum: 64s. If 0, does not wait for response. ATTENTION: in slave mode, this parameter is ignored.  
 
@@ -79,7 +79,7 @@ _**General Purpose**_
 
    Receiving data through RS485 network  
 
-   _*Return*_: List of characters corresponding to data received.
+   _*Return*_: bytes corresponding to data received.
 
 
 _**Curves**_
