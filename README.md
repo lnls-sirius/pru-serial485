@@ -84,7 +84,7 @@ _**General Purpose**_
 
 _**Curves**_
 
-- ```PRUserial485_curve(float_list curve1, float_list curve2, float_list curve3, float_list curve4, int block)```
+- ```PRUserial485_curve(int block, [float_list curve1, float_list curve2, float_list curve3, float_list curve4])```
 
    Storing curves into memory. Each curve correspond to a power supply in the crate.   
 
@@ -108,7 +108,7 @@ _**Curves**_
 
    Read block identification which will be performed in next cycle.    
 
-   _*Returns*_: Block indentification (0 to 3)
+   _*Returns*_: Block identification (0 to 3)
 
 
 - ```PRUserial485_set_curve_pointer(int next_point)```
@@ -156,7 +156,7 @@ _**Sync Operation**_
 
    Verifies whether PRU is waiting for a sync pulse or not    
 
-   _*Returns*_: boolean True or False
+   _*Returns*_: 1 if true, 0 if false
 
 
 - ```PRUserial485_read_pulse_count_sync()```
