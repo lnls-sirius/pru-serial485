@@ -485,7 +485,11 @@ uint8_t read_curve_block(){
 
 void *monitorRecvBuffer(void *arg){
     // ----- Copia dos dados recebidos
-    uint32_t tamanho;
+    uint32_t pru_recv_pointer = OFFSET_SHRAM_READ + 3;
+    uint32_t os_recv_pointer = OFFSET_SHRAM_READ + 3;
+    uint32_t tamanho = 0;
+    uint32_t BUFF_RECV_START = 0x1803;
+    uint32_t BUFF_RECV_STOP = 0x2800;
 
     while(thread_control){
         // ----- Aguarda sinal de finalizacao do ciclo
@@ -494,11 +498,8 @@ void *monitorRecvBuffer(void *arg){
         if(prudata[25] == "M"){
             prussdrv_pru_wait_event(PRU_EVTOUT_1);
             prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
-        }
-        else{
-            prussdrv_pru_wait_event(PRU_EVTOUT_0);
-            prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
-        }
+
+
 
         // ----- Nova mensagem recebida !
         while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){}
@@ -519,6 +520,52 @@ void *monitorRecvBuffer(void *arg){
         }
         // ----- Sinaliza mensagem antiga
         prudata[1] = MENSAGEM_ANTIGA;
+        }
+
+        else{
+            prussdrv_pru_wait_event(PRU_EVTOUT_0);
+            prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
+
+            // ----- Nova mensagem recebida !
+            pru_recv_pointer = 0;
+            for(i=0; i<4; i++){
+                pru_recv_pointer += prudata[OFFSET_SHRAM_READ+i] << i*8;
+            }
+            while(pru_recv_pointer == os_recv_pointer){
+                // Atualiza pru_recv_pointer
+                pru_recv_pointer = 0;
+                for(i=0; i<4; i++){
+                    pru_recv_pointer += prudata[OFFSET_SHRAM_READ+i] << i*8;
+                }
+            }
+
+
+            // Ha DADOS
+            if (pru_recv_pointer > os_recv_pointer){
+                tamanho = pru_recv_pointer - os_recv_pointer;
+            }
+            else{
+                tamanho = (BUFF_RECV_STOP - BUFF_RECV_START) - (os_recv_pointer - pru_recv_pointer);
+            }
+
+            for(i=0; i<tamanho; i++){
+                os_recv_pointer++;
+                receive_buffer[pru_pointer] = prudata[os_recv_pointer];
+                pru_pointer++;
+                //printf("Pointer PRU %d OS %d\n\n", pru_recv_pointer, os_recv_pointer);
+                // Reset pru_pointer
+                if(pru_pointer == BUFF_SIZE){
+                    pru_pointer = 0;
+                }
+                // Reset recv pointer
+                if(os_recv_pointer == BUFF_RECV_STOP){
+                    os_recv_pointer = BUFF_RECV_START;
+                }
+            }
+
+            // ----- Sinaliza mensagem antiga
+            prudata[1] = MENSAGEM_ANTIGA;
+        }
     }
 }
 
@@ -575,7 +622,7 @@ int init_start_PRU(int baudrate, char mode){
   // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
   if(prudata[25]=='S')
     prudata[1]=MENSAGEM_ANTIGA;
-    prudata[32] = 0x10;
+    prudata[32] = 0x12;
 
   // Endereco de Hardware
   prudata[24] = hardware_address_serialPRU();

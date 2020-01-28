@@ -46,7 +46,7 @@
 #define	J							r28
 #define OPERATION_MODE				r15
 #define ENDERECO_HARDWARE			r14
-#define PISCA_LED				r13
+#define RECV_POINTER			    r13
 
 
 #define UART_MODES_ADDRESS			0x89	// UART_WRITE_END
@@ -660,6 +660,15 @@ DATA_READY:
 PROCEDURE_START_SLAVE:
 	ZERO    &J, 4
 
+    // Configura ponteiro para SHRAM_WRITE
+    ZERO	&RECV_POINTER, 4
+    ADD	    RECV_POINTER, OFFSET_SHRAM_WRITE, 3			// I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
+
+
+    // ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
+    	SBCO	RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 		// Armazena tamanho nos primeiros bytes
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 
 START_SLAVE:
     NOP
@@ -721,14 +730,6 @@ WAIT_RECEIVED_SLAVE:
 
 
 
-
-// Aguarda dados anteriores copiados
-WAIT_OLD_MSG:
-	LBCO	I, SHRAM_BASE, 1, 1
-	QBNE	WAIT_OLD_MSG, I.b0, 0x55		// 0x55 : copiado.
-// -------------------------------------------
-
-
 // Configura ponteiro para SHRAM_WRITE
 	ZERO	&I, 4
 	ADD	I,OFFSET_SHRAM_WRITE, 3			// I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
@@ -757,13 +758,19 @@ STORE_16BYTES_SLAVE:
 	SEND_SPI 0x00,8						// Comando Read
 
 STORE_16_MEMORY_SLAVE:
-	ADD	I,I,1						// SHRAM[0x1800 + 4]
+    CALL VERIFY_RECV_POINTER
+	ADD	RECV_POINTER, RECV_POINTER,1						// SHRAM[0x1800 + 4]
 	RECEIVE_SPI 8						// Recebe byte bloco
-	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1			// Armazena no byte I da shram
+	SBCO	BUFFER_SPI_IN, SHRAM_BASE, RECV_POINTER, 1			// Armazena no byte I da shram
+
+
 	ADD		J,J,1
 
 	QBNE	STORE_16_MEMORY_SLAVE,J,0x08			// Se J == 16, termina loop
 	CS_UP
+
+    SBCO	RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 		// Armazena RECV_POINTER nos primeiros bytes
+
 
 	JMP 	RXLEVEL_AND_TIMEOUT_SLAVE
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -771,6 +778,7 @@ STORE_16_MEMORY_SLAVE:
  // Armazena bytes restantes - Interrupcao RxTimeout
 STORE_LEFTBYTES_SLAVE:
     SET LED_IDLE
+
  // Le Rx FIFO Level
 	CS_DOWN
 	SEND_SPI 0x12, 8
@@ -784,25 +792,22 @@ STORE_LEFTBYTES_SLAVE:
 	SEND_SPI 0x00,8						// Comando Read
 
 STORE_LAST16_MEMORY_SLAVE:
-	ADD		I,I,1					    // Proximo endereco da SHRAM
+    CALL VERIFY_RECV_POINTER
+	ADD		RECV_POINTER,RECV_POINTER,1					    // Proximo endereco da SHRAM
 	RECEIVE_SPI 8						// Recebe byte bloco
-	SBCO	BUFFER_SPI_IN, SHRAM_BASE, I, 1			// Armazena no byte I da shram
+	SBCO	BUFFER_SPI_IN, SHRAM_BASE, RECV_POINTER, 1			// Armazena no byte I da shram
+
+
 	SUB		J,J,1
 
 	QBNE	STORE_LAST16_MEMORY_SLAVE,J,0x00		// Se J == 0, termina loop
 	CS_UP
 
 
- // ~~~~~ TAMANHO DOS DADOS ~~~~~~~~~~~~~~~~
-	ZERO	&J,4
-	ADD		J,OFFSET_SHRAM_WRITE,3			// J = 0x1803
-	SUB		I, I, J					// I = I - J = tamanho
+// ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
+	SBCO	RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 		// Armazena RECV_POINTER nos primeiros bytes
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-	SBCO	I, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 		// Armazena tamanho nos primeiros bytes
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-	//READ_ISR
-	//READ_LSR
 
 	CS_DOWN
 	SEND_SPI INTERRUPTS_IRQEN_ADDRESS, 8
@@ -815,7 +820,7 @@ STORE_LAST16_MEMORY_SLAVE:
 
 	// Configura pointer para SHRAM_WRITE
         ZERO    &I, 4
-        ADD     I,OFFSET_SHRAM_WRITE, 4                           // I pointer to the start of valid data SHRAM[0x1804]
+        SUB     I,RECV_POINTER, 6                           // I pointer to the start of valid data
 
 	// Dado[0] -- 0xFF
 	ZERO	&J, 4
@@ -871,8 +876,6 @@ UPDATE_MSG_COUNTING:
 // ----- ENVIO DE DADOS - MODO SLAVE --------------------------------------------------------------
  SEND_DATA_SLAVE:
 
- //READ_ISR
- //READ_LSR
  	CALL SEND_DATA_UART
 
  	MOV	I, MENSAGEM_ANTIGA
@@ -890,10 +893,6 @@ UPDATE_MSG_COUNTING:
 // ----- FINALIZACAO - Finaliza e aguarda por novo envio de dados  --------------------------------
 DATA_READY_SLAVE:
 
-
-//	CLR	LED_READ
-
-
     MOV     I, MENSAGEM_RECEBIDA_NOVA       // Confirma Dados Recebidos prudata[1]=0x00
 	SBCO	I, SHRAM_BASE, 1, 1
     MOV 	r31.b0, PRU0_ARM_INTERRUPT+16
@@ -909,6 +908,22 @@ DATA_READY_SLAVE:
 END:
 	HALT
 
+
+
+// -----------------------------------------------------------------------
+// --------------------- VERIFICA RECV_POINTER - 4093 --------------------
+// -----------------------------------------------------------------------
+VERIFY_RECV_POINTER:
+    SUB I, RECV_POINTER, OFFSET_SHRAM_WRITE
+    LSR I, I, 12
+    QBEQ RECV_CONTINUE, I, 0
+
+    // Reset RECV_POINTER
+    ZERO	&RECV_POINTER, 4
+    ADD	    RECV_POINTER, OFFSET_SHRAM_WRITE, 3			// I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
+
+RECV_CONTINUE:
+    RET
 
 
 
