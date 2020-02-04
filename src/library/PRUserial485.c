@@ -111,6 +111,8 @@ volatile uint8_t receive_buffer[BUFF_SIZE];
 volatile uint16_t pru_pointer = 0, read_pointer = 0;
 volatile pthread_t tid = 0;
 volatile uint8_t thread_control = 0;
+pthread_mutex_t lock;
+
 size_t i;
 
 
@@ -546,6 +548,7 @@ void *monitorRecvBuffer(void *arg){
                 tamanho = (BUFF_RECV_STOP - BUFF_RECV_START) - (os_recv_pointer - pru_recv_pointer);
             }
 
+            pthread_mutex_lock(&lock);
             for(i=0; i<tamanho; i++){
                 os_recv_pointer++;
                 receive_buffer[pru_pointer] = prudata[os_recv_pointer];
@@ -559,6 +562,7 @@ void *monitorRecvBuffer(void *arg){
                     os_recv_pointer = BUFF_RECV_START;
                 }
             }
+            pthread_mutex_unlock(&lock);
             // ----- Sinaliza mensagem antiga
             prudata[1] = MENSAGEM_ANTIGA;
         }
@@ -802,6 +806,7 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read){
         *tamanho = bytes2read;
     }
 
+    pthread_mutex_lock(&lock);
     for(i=0; i<*tamanho; i++){
         data[i] = receive_buffer[read_pointer];
         read_pointer++;
@@ -810,5 +815,6 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read){
             read_pointer = 0;
         }
     }
+    pthread_mutex_unlock(&lock);
     return OK;
 }

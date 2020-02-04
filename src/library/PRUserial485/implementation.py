@@ -30,7 +30,7 @@ except OSError:
     libraries_loaded = False
 
 # Buffer de 8 kB para o envio e recebimento de dados
-data_buffer = (ctypes.c_uint8 * 8192)()
+data_buffer = (ctypes.c_uint8 * 8192*2)()
 
 # Buffer para armazenamento dos pontos de curva
 C1_buffer = (ctypes.c_float * 262144)()
