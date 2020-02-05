@@ -622,7 +622,7 @@ int init_start_PRU(int baudrate, char mode){
     // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
     if(prudata[25]=='S'){
         prudata[1]=MENSAGEM_ANTIGA;
-        prudata[32] = 0x02;
+        prudata[32] = 0x12;
     }
 
     // Endereco de Hardware

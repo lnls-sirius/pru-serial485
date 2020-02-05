@@ -720,8 +720,8 @@ RXLEVEL_AND_TIMEOUT_SLAVE:
     RECEIVE_SPI 8
     CS_UP
 
-    LSR         BUFFER_SPI_IN, BUFFER_SPI_IN, 4
-    QBEQ        RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0     // Aguarda Buffer TX >= 0x0000 1000 = 8
+    LSR         BUFFER_SPI_IN, BUFFER_SPI_IN, 3
+    QBEQ        RXLEVEL_AND_TIMEOUT_SLAVE, BUFFER_SPI_IN, 0     // Aguarda Buffer TX >= 0x0000 0100 = 4
 
 
  // Armazena 16 bytes na SHRAM
@@ -739,7 +739,7 @@ STORE_16_MEMORY_SLAVE:
 
     ADD         J,J,1
 
-    QBNE        STORE_16_MEMORY_SLAVE,J,0x08                    // Se J == 16, termina loop
+    QBNE        STORE_16_MEMORY_SLAVE,J,0x04                    // Se J == 4, termina loop
     CS_UP
 
     SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
@@ -750,7 +750,6 @@ STORE_16_MEMORY_SLAVE:
 
  // Armazena bytes restantes - Interrupcao RxTimeout
 STORE_LEFTBYTES_SLAVE:
-    SET         LED_IDLE
 
  // Le Rx FIFO Level
     CS_DOWN
@@ -776,6 +775,7 @@ STORE_LAST16_MEMORY_SLAVE:
     QBNE        STORE_LAST16_MEMORY_SLAVE,J,0x00                // Se J == 0, termina loop
     CS_UP
 
+    SET         LED_IDLE
 
 // ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
     SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
