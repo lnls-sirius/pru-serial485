@@ -104,11 +104,11 @@ Date: April/2018
 */
 
 
-#define BUFF_SIZE 10000
+#define BUFF_SIZE 100000
 
 volatile uint8_t* prudata;
 volatile uint8_t receive_buffer[BUFF_SIZE];
-volatile uint16_t pru_pointer = 0, read_pointer = 0;
+volatile uint32_t pru_pointer = 0, read_pointer = 0;
 volatile pthread_t tid = 0;
 volatile uint8_t thread_control = 0;
 pthread_mutex_t lock;
@@ -492,6 +492,7 @@ void *monitorRecvBuffer(void *arg){
     uint32_t tamanho;
     uint32_t BUFF_RECV_START = 0x1803;
     uint32_t BUFF_RECV_STOP = 0x2800;
+    uint32_t idx;
 
     while(thread_control){
         // ----- Aguarda sinal de finalizacao do ciclo
@@ -507,12 +508,12 @@ void *monitorRecvBuffer(void *arg){
 
             // ----- Copia dos dados recebidos
             // Tamanho
-            for(i=0; i<4; i++){
-                tamanho += prudata[OFFSET_SHRAM_READ+i] << i*8;
+            for(idx=0; idx<4; idx++){
+                tamanho += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
             }
             // Dados
-            for(i=0; i<tamanho; i++){
-                receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+i];
+            for(idx=0; idx<tamanho; idx++){
+                receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+idx];
                 pru_pointer++;
                 // Reset pru_pointer
                 if(pru_pointer == BUFF_SIZE){
@@ -529,14 +530,14 @@ void *monitorRecvBuffer(void *arg){
 
             // ----- Nova mensagem recebida !
             pru_recv_pointer = 0;
-            for(i=0; i<4; i++){
-                pru_recv_pointer += prudata[OFFSET_SHRAM_READ+i] << i*8;
+            for(idx=0; idx<4; idx++){
+                pru_recv_pointer += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
             }
             while(pru_recv_pointer == os_recv_pointer){
                 // Atualiza pru_recv_pointer
                 pru_recv_pointer = 0;
-                for(i=0; i<4; i++){
-                    pru_recv_pointer += prudata[OFFSET_SHRAM_READ+i] << i*8;
+                for(idx=0; idx<4; idx++){
+                    pru_recv_pointer += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
                 }
             }
 
@@ -549,7 +550,8 @@ void *monitorRecvBuffer(void *arg){
             }
 
             pthread_mutex_lock(&lock);
-            for(i=0; i<tamanho; i++){
+
+            for(idx=0; idx<tamanho; idx++){
                 os_recv_pointer++;
                 receive_buffer[pru_pointer] = prudata[os_recv_pointer];
                 pru_pointer++;
@@ -622,7 +624,7 @@ int init_start_PRU(int baudrate, char mode){
     // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
     if(prudata[25]=='S'){
         prudata[1]=MENSAGEM_ANTIGA;
-        prudata[32] = 0x12;
+        prudata[32] = 0x02;
     }
 
     // Endereco de Hardware
@@ -789,26 +791,28 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
 
 
-int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read){
+int recv_data_PRU(uint8_t *data, uint32_t *tamanho_recv, uint32_t bytes2read){
+    uint32_t index;
+    pthread_mutex_lock(&lock);
     if(pru_pointer == read_pointer){
-        *tamanho = 0;
+        *tamanho_recv = 0;
+        pthread_mutex_unlock(&lock);
         return OK;
     }
 
     if (pru_pointer > read_pointer){
-        *tamanho = pru_pointer - read_pointer;
+        *tamanho_recv = pru_pointer - read_pointer;
     }
     else{
-        *tamanho = BUFF_SIZE - (read_pointer - pru_pointer);
+        *tamanho_recv = BUFF_SIZE - (read_pointer - pru_pointer);
     }
 
-    if((bytes2read != 0) & (*tamanho > bytes2read)){
-        *tamanho = bytes2read;
+    if((bytes2read != 0) & (*tamanho_recv > bytes2read)){
+        *tamanho_recv = bytes2read;
     }
 
-    pthread_mutex_lock(&lock);
-    for(i=0; i<*tamanho; i++){
-        data[i] = receive_buffer[read_pointer];
+    for(index=0; index<*tamanho_recv; index++){
+        data[index] = receive_buffer[read_pointer];
         read_pointer++;
         // Reset pointer
         if(read_pointer == BUFF_SIZE){
