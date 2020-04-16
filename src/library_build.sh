@@ -30,22 +30,22 @@ rm PRUserial485.o libPRUserial485.so libPRUserial485.a
 echo "OK"
 
 
-echo "."
-echo ".."
-echo "..."
-echo "Building and installing Python library..."
-if [ -z "$1" ]; then
+#echo "."
+#echo ".."
+#echo "..."
+#echo "Building and installing Python library..."
+#if [ -z "$1" ]; then
   python-sirius setup.py install
-  python2 setup.py install
-else
-  python-sirius setup.py $1
-  python2 setup.py $1
-fi
-echo "OK"
-
-echo "."
-echo ".."
-echo "..."
-echo "Done!"
-
+#  python2 setup.py install
+#else
+#  python-sirius setup.py $1
+#  python2 setup.py $1
+#fi
+#echo "OK"
+#
+#echo "."
+#echo ".."
+#echo "..."
+#echo "Done!"
+#
 cd ..

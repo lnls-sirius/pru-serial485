@@ -282,7 +282,6 @@ void set_sync_stop_PRU(){
 void close_PRU(){
     // ----- Desabilita PRU e fecha mapeamento da shared RAM
     thread_control = 0;
-    pthread_join(tid,NULL);
     tid = 0;
     prussdrv_pru_disable(PRU_NUM);
     prussdrv_exit();
@@ -498,14 +497,12 @@ void *monitorRecvBuffer(void *arg){
         // ----- Aguarda sinal de finalizacao do ciclo
         tamanho = 0;
 
-        if(prudata[25] == "M"){
-            prussdrv_pru_wait_event(PRU_EVTOUT_1);
-            prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
-
+        if(prudata[25] == 'M'){
+            prussdrv_pru_wait_event(PRU_EVTOUT_0);
+            prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
             // ----- Nova mensagem recebida !
             while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
             }
-
             // ----- Copia dos dados recebidos
             // Tamanho
             for(idx=0; idx<4; idx++){
@@ -529,10 +526,18 @@ void *monitorRecvBuffer(void *arg){
             prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
             // ----- Nova mensagem recebida !
+            // Aguarda dado salvo na SHRAM
+            while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
+            }
+            // ----- Sinaliza mensagem antiga
+            prudata[1] = MENSAGEM_ANTIGA;
+
+            // Le ponteiro da PRU
             pru_recv_pointer = 0;
             for(idx=0; idx<4; idx++){
                 pru_recv_pointer += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
             }
+
             while(pru_recv_pointer == os_recv_pointer){
                 // Atualiza pru_recv_pointer
                 pru_recv_pointer = 0;
@@ -565,8 +570,7 @@ void *monitorRecvBuffer(void *arg){
                 }
             }
             pthread_mutex_unlock(&lock);
-            // ----- Sinaliza mensagem antiga
-            prudata[1] = MENSAGEM_ANTIGA;
+
         }
     }
 }
@@ -731,9 +735,17 @@ int init_start_PRU(int baudrate, char mode){
     pru_pointer = 0;
     read_pointer = 0;
     if(tid == 0){
+        pthread_attr_t attr;
+        struct sched_param param;
+
+        pthread_attr_init (&attr);
+        pthread_attr_getschedparam (&attr, &param);
+        (param.sched_priority)++;
+        pthread_attr_setschedparam (&attr, &param);
+
         thread_control = 1;
         pthread_t thread_id;
-        pthread_create(&thread_id, NULL, monitorRecvBuffer, NULL);
+        pthread_create(&thread_id, &attr, monitorRecvBuffer, NULL);
         tid = thread_id;
     }
     return OK;
@@ -776,15 +788,14 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     prussdrv_pru_wait_event(PRU_EVTOUT_1);
     prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
 
-
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
-    if(prudata[25]=='M'){
-        while(prudata[1] != MENSAGEM_RECEBIDA_NOVA);
+    if(prudata[25] == 'M'){
+        while(prudata[1] != MENSAGEM_ANTIGA);
     }
 
     // ----- SLAVE: Aguarda fim de envio
     if(prudata[25]=='S'){
-        while(prudata[1] != 0x55);
+        while(prudata[1] != MENSAGEM_ANTIGA);
     }
     return OK;
 }

@@ -617,6 +617,7 @@ DATA_READY:
     SBCO        I, SHRAM_BASE, 1, 1                             // Confirma Dados Recebidos prudata[1]=0x00
 
     MOV         r31.b0, PRU1_ARM_INTERRUPT+16
+    MOV         r31.b0, PRU0_ARM_INTERRUPT+16
 
     JMP         PROCEDURE_START_MASTER
 // ------------------------------------------------------------------------------------------------
@@ -742,7 +743,7 @@ STORE_16_MEMORY_SLAVE:
     QBNE        STORE_16_MEMORY_SLAVE,J,0x08                    // Se J == 8, termina loop
     CS_UP
 
-    SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
+    //SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
 
 
     JMP         RXLEVEL_AND_TIMEOUT_SLAVE
@@ -758,6 +759,9 @@ STORE_LEFTBYTES_SLAVE:
     CS_UP
 
     ZERO        &J,4
+
+
+
     MOV         J,BUFFER_SPI_IN                                 // J = Quantia de bytes no RxFIFO (MAX3107)
 
     CS_DOWN
@@ -778,6 +782,7 @@ STORE_LAST16_MEMORY_SLAVE:
     SET         LED_IDLE
 
 // ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
+    SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
     SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -855,6 +860,7 @@ SEND_DATA_SLAVE:
 
 // ----- FINALIZACAO - Finaliza e aguarda por novo envio de dados  --------------------------------
 DATA_READY_SLAVE:
+    ZERO        &I, 4
 
     MOV         I, MENSAGEM_RECEBIDA_NOVA                       // Confirma Dados Recebidos prudata[1]=0x00
     SBCO        I, SHRAM_BASE, 1, 1
@@ -875,13 +881,14 @@ END:
 // --------------------- VERIFICA RECV_POINTER - 4093 --------------------
 // -----------------------------------------------------------------------
 VERIFY_RECV_POINTER:
-    SUB         I, RECV_POINTER, OFFSET_SHRAM_WRITE
-    LSR         I, I, 12
-    QBEQ        RECV_CONTINUE, I, 0
+    ZERO        &K, 4
+    SUB         K, RECV_POINTER, OFFSET_SHRAM_WRITE
+    LSR         K, K, 12
+    QBEQ        RECV_CONTINUE, K, 0
 
     // Reset RECV_POINTER
     ZERO        &RECV_POINTER, 4
-    ADD         RECV_POINTER, OFFSET_SHRAM_WRITE, 3             // I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
+    ADD         RECV_POINTER, OFFSET_SHRAM_WRITE, 3             // ponteiro para início dos dados -  SHRAM[0x1800 + 3]
 
 RECV_CONTINUE:
     RET
