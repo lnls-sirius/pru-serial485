@@ -2,7 +2,7 @@ from distutils.core import setup, Extension
 import subprocess as _sp
 
 with open('VERSION','r') as _f:
-    __version__ = _f.read().strip() + _sp.getoutput('git log --format=%h -1')
+    __version__ = _f.read().strip() + ':' + _sp.getoutput('git log --format=%h -1')
 
 setup(  name            = 'PRUserial485',
         version         = __version__,

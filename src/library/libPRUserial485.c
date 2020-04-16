@@ -118,7 +118,7 @@ PyObject* pru_close(PyObject* self, PyObject *args)
 
 // ------------------------------------------------------------------------------------------------
 // int PRUserial485_curve(int block, [[floats1],[floats2],[floats3],[floats4]]) ->
-// int send_data_PRU(char array, uint32 length, float timeout)
+// int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints, uint8_t block)
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_load_curve_block(PyObject* self, PyObject *args)
 {
@@ -197,7 +197,6 @@ PyObject* pru_open(PyObject* self, PyObject *args)
     return Py_BuildValue("i", init_start_PRU(br,mode));
 }
 
-
 // ------------------------------------------------------------------------------------------------
 // int PRUserial485_write(bytes/bytearray, float timeout) -> int send_data_PRU(char array, uint32 length, float timeout)
 // ------------------------------------------------------------------------------------------------
@@ -229,17 +228,36 @@ PyObject* pru_send(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
-// bytes PRUserial485_read() -> int recv_data_PRU(char array, uint32 length)
+// bytes PRUserial485_read(uint32_t bytes2read = 0) -> int recv_data_PRU(char array, uint32 length, uint32_t bytes2read)
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_recv(PyObject* self, PyObject *args)
 {
     uint32_t data_size;
-    uint8_t data[2048];
+    uint8_t data[100000];
+    uint32_t bytes2read = 0;
 
-    recv_data_PRU(data, &data_size);
+    if (!PyArg_ParseTuple(args, "|l", &bytes2read))
+    {
+        PyErr_SetString(PyExc_TypeError, "Bytes to read must be a positive int value");
+        return NULL;
+    }
+    
+
+    recv_data_PRU(data, &data_size, bytes2read);
 
     return Py_BuildValue("y#", data, data_size);
 }
+
+
+
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_read_flush() -> int recv_flush()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_recv_flush(PyObject* self, PyObject *args)
+{
+     return Py_BuildValue("i", recv_flush());
+}
+
 
 
 // ------------------------------------------------------------------------------------------------
@@ -271,6 +289,7 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_open",                   (PyCFunction)pru_open,                    METH_VARARGS, NULL},
     {"PRUserial485_write",                  (PyCFunction)pru_send,                    METH_VARARGS, NULL},
     {"PRUserial485_read",                   (PyCFunction)pru_recv,                    METH_VARARGS, NULL},
+    {"PRUserial485_read_flush",             (PyCFunction)pru_recv_flush,              METH_VARARGS, NULL},
     {"__version__",                         (PyCFunction)pru_version,                 METH_VARARGS, NULL},
     {NULL}
 };

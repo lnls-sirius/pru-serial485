@@ -790,7 +790,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
     if(prudata[25] == 'M'){
-        while(prudata[1] != MENSAGEM_ANTIGA);
+        while(prudata[1] != MENSAGEM_ANTIGA); 
     }
 
     // ----- SLAVE: Aguarda fim de envio
@@ -829,6 +829,17 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho_recv, uint32_t bytes2read){
         if(read_pointer == BUFF_SIZE){
             read_pointer = 0;
         }
+    }
+    pthread_mutex_unlock(&lock);
+    return OK;
+}
+
+
+
+int recv_flush(){
+    pthread_mutex_lock(&lock);
+    if(pru_pointer != read_pointer){
+        read_pointer = pru_pointer;
     }
     pthread_mutex_unlock(&lock);
     return OK;

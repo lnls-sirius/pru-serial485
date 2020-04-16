@@ -254,6 +254,16 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
 
 
 
+/* RECEBIMENTO DE DADOS
+ *
+ * Flush na FIFO de recebimento da PRUserial485.
+ * --Retorno--
+ * OK
+ *
+*/
+int recv_flush();
+
+
 #ifdef __cplusplus
 }
 #endif
