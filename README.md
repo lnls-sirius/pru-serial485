@@ -75,11 +75,21 @@ _**General Purpose**_
    Returns just after data completely sent.
 
 
-- ```PRUserial485_read()```
+- ```PRUserial485_read(uint32_t nbytes)```
 
-   Receiving data through RS485 network  
+   Receiving data through RS485 network
+
+   _*Parameters*_
+  * _nbytes (OPTIONAL):_  
+  Number of bytes to read. If empty or 0, all data will be read.
+  If nbytes is greater than available bytes, return all available bytes. Note: This function does not block or wait for incoming data.   
 
    _*Return*_: bytes corresponding to data received.
+
+
+- ```PRUserial485_read_flush()```
+
+   Flush receive FIFO buffer.
 
 
 _**Curves**_
