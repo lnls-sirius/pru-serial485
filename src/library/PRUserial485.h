@@ -250,7 +250,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
  *                        indicados pelos parametros da funcao.
  * ERR_RECV_DATA_OLDMSG : caso nao exista novos dados de recepcao no buffer
 */
-int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
+int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
 
 
 
