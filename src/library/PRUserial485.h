@@ -11,7 +11,7 @@ Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
 Controls Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: April/2018
+Date: May/2020
 */
 
 #include <stdio.h>
@@ -250,8 +250,18 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
  *                        indicados pelos parametros da funcao.
  * ERR_RECV_DATA_OLDMSG : caso nao exista novos dados de recepcao no buffer
 */
-int recv_data_PRU(uint8_t *data, uint32_t *tamanho);
+int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
 
+
+
+/* RECEBIMENTO DE DADOS
+ *
+ * Flush na FIFO de recebimento da PRUserial485.
+ * --Retorno--
+ * OK
+ *
+*/
+int recv_flush();
 
 
 #ifdef __cplusplus
