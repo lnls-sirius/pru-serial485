@@ -6,7 +6,7 @@
 //
 // CONTROLS GROUP
 // Author: Patricia Nallin (patricia.nallin@lnls.br)
-// Release Date: Jan 21, 2020
+// Release Date: May 18, 2020
 //
 // ------------------------------------------------------------------------------------------------
 

@@ -11,7 +11,7 @@ Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
 Controls Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: April/2018
+Date: May/2020
 */
 
 #include <stdio.h>
