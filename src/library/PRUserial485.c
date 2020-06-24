@@ -23,7 +23,9 @@ Date: May/2020
 
 
 #define PRU_NUM             1
+#define KYMA_PRU_NUM        0
 #define PRU_BINARY          "/usr/bin/PRUserial485.bin"
+#define KYMA_PRU_BINARY     "/usr/bin/Kyma-FF.bin"
 #define OFFSET_SHRAM_WRITE  0x64    // 100 general purpose bytes
 #define OFFSET_SHRAM_READ   0x1800  //
 
@@ -88,7 +90,8 @@ Date: May/2020
 *        | 0xC1 - Continuous curve sequence & Intercalated read messages
 *        | 0xCE - Continuous curve sequence & Read messages at End of curve
 *        | 0x5B - Single Sequence - Single Broadcast Function command
-*
+* prudata[86] = Feed-forward status (0 disabled - 255 enabled)
+* prudata[87..90] = Feed-forward position
 *
 * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
 *
@@ -111,9 +114,11 @@ volatile uint8_t receive_buffer[BUFF_SIZE];
 volatile uint32_t pru_pointer = 0, read_pointer = 0;
 volatile pthread_t tid = 0;
 volatile uint8_t thread_control = 0;
-pthread_mutex_t lock;
+pthread_mutex_t lock, incoming_data_thread, incoming_data_function;
 
 size_t i;
+
+
 
 
 
@@ -186,14 +191,60 @@ void set_curve_pointer(uint32_t new_pointer){
     }
 }
 
-
-
 uint32_t read_curve_pointer(){
     uint32_t pointer = 0;
     pointer = ((prudata[13] << 24) + (prudata[12] << 16) + (prudata[11] << 8) + prudata[10])/16;
     return pointer;
 }
 
+
+void set_FeedForward_enabled(int status)
+{
+    if(status)
+    {
+        // ENABLED
+        prudata[86] = 0xFF;
+    }
+    else
+    {
+        // DISABLED
+        prudata[86] = 0x00;
+    }
+}
+
+int FeedForward_status(){
+    if(prudata[86] == 0x00){
+        return 0;
+    }
+    if(prudata[86] == 0xff){
+        return 1;
+    }
+}
+
+void set_FeedForward_step(uint32_t step){
+    if(prudata[86] == 0)
+    {
+        prudata[87] = (step);        // LSByte do new_pointer [7..0]
+        prudata[88] = (step) >> 8;   // Byte do new_pointer [15..8]
+        prudata[89] = (step) >> 16;  // Byte do new_pointer [23..16]
+        prudata[90] = (step) >> 24;  // MSByte do new_pointer [31..24]
+
+        while (((prudata[90]<<24) + (prudata[89]<<16) + (prudata[88]<<8) + prudata[87]) != step){
+        }
+    }
+}
+
+uint32_t read_FeedForward_step(int blocking){
+    uint32_t step = 0;
+    // ----- Aguarda sinal de finalizacao do ciclo
+    if(blocking)
+    {
+        prussdrv_pru_wait_event(PRU_EVTOUT_0);
+        prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
+    }
+    step = ((prudata[90] << 24) + (prudata[89] << 16) + (prudata[88] << 8) + prudata[87]);
+    return step;
+}
 
 
 int sync_status(){
@@ -497,9 +548,14 @@ void *monitorRecvBuffer(void *arg){
         // ----- Aguarda sinal de finalizacao do ciclo
         tamanho = 0;
 
+
         if(prudata[25] == 'M'){
-            prussdrv_pru_wait_event(PRU_EVTOUT_0);
-            prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
+            prussdrv_pru_wait_event(PRU_EVTOUT_1);
+            prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+    /*        pthread_mutex_unlock(&incoming_data_thread);
+            pthread_mutex_lock(&incoming_data_function);
+            pthread_mutex_unlock(&incoming_data_function);
+            pthread_mutex_lock(&incoming_data_thread);*/
             // ----- Nova mensagem recebida !
             while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
             }
@@ -522,8 +578,12 @@ void *monitorRecvBuffer(void *arg){
         }
 
         else{
-            prussdrv_pru_wait_event(PRU_EVTOUT_0);
-            prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
+            prussdrv_pru_wait_event(PRU_EVTOUT_1);
+            prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+        /*    pthread_mutex_unlock(&incoming_data_thread);
+            pthread_mutex_lock(&incoming_data_function);
+            pthread_mutex_unlock(&incoming_data_function);
+            pthread_mutex_lock(&incoming_data_thread);*/
 
             // ----- Nova mensagem recebida !
             // Aguarda dado salvo na SHRAM
@@ -593,6 +653,7 @@ int init_start_PRU(int baudrate, char mode){
         // printf("prussdrv_open open failed\n");
         return ERR_INIT_PRU_SSDRV;
     }
+
     prussdrv_pruintc_init(&pruss_intc_initdata);
 
 
@@ -729,6 +790,7 @@ int init_start_PRU(int baudrate, char mode){
 
     // ----- Executar codigo na PRU
     prussdrv_exec_program (PRU_NUM, PRU_BINARY);
+    prussdrv_exec_program (KYMA_PRU_NUM, KYMA_PRU_BINARY);
 
     // ----- Lanca thread para monitorar recebimento de dados
     //        e reinicializa ponteiros
@@ -784,13 +846,18 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     // ----- Dados prontos para envio
     prudata[1] = MENSAGEM_PARA_ENVIAR;
 
+
     // ----- Aguarda sinal de finalizacao do ciclo
-    prussdrv_pru_wait_event(PRU_EVTOUT_1);
-    prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
+/*    pthread_mutex_lock(&incoming_data_function);
+    pthread_mutex_lock(&incoming_data_thread);
+    pthread_mutex_unlock(&incoming_data_thread);
+    pthread_mutex_unlock(&incoming_data_function);*/
+    //prussdrv_pru_wait_event(PRU_EVTOUT_1);
+    //prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
 
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
     if(prudata[25] == 'M'){
-        while(prudata[1] != MENSAGEM_ANTIGA); 
+        while(prudata[1] != MENSAGEM_ANTIGA);
     }
 
     // ----- SLAVE: Aguarda fim de envio

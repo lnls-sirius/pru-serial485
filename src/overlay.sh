@@ -27,7 +27,9 @@ elif [ "${KERNEL_VERSION%.*}" = "4.14" ]; then
     config-pin P8_33 in_pd          # SW address 3
     config-pin P8_34 in_pd          # SW address 4
     config-pin P8_35 in_pd          # SW address 5
+    # Kyma
+    config-pin P8_15 pruin          # Kyma Primary
+    config-pin P8_16 pruin          # Kyma Secondary
 else
     echo "Version not supported"
 fi
-

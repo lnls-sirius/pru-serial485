@@ -25,7 +25,7 @@
 #define IIR                     0x04    // Interrupt Identification Register
 #define FCR                     0x08    // FIFO Control Register (write-only)
 #define FCR_FIFOEN_BIT      	0x00    // enable and disable fifo
-#define FCR_RXCLR_BIT  		0x01    // receiver fifo clear
+#define FCR_RXCLR_BIT  		    0x01    // receiver fifo clear
 #define FCR_TXCLR_BIT       	0x02    // transmitter fifo clear
 #define FCR_DMAMODE1_BIT    	0x03    // dma mode 1 enable
 
@@ -53,96 +53,11 @@
 	CLR     r0, r0, 4
 	SBCO    r0, CONST_PRUCFG, 4, 4
 	MOV     r0, SHARED_RAM                  // Set C28 to point to shared RAM
-	MOV     r1, PRU1_CTRL + CTPPR0
+	MOV     r1, PRU0_CTRL + CTPPR0
 	SBBO    r0, r1, 0, 4
 .endm
 
 
-.macro SEND_SPI
-.mparam data, size
-	MOV BUFFER_SPI_OUT,data
-	MOV	TAMANHO, size
-	CALL SPI_SEND
-.endm
-
-
-.macro RECEIVE_SPI
-.mparam size
-	MOV	TAMANHO, size
-	CALL SPI_RECEIVE
-.endm
-
-
-
 .macro NOP				// No Operation
 	MOV	r15,r15
-.endm
-
-
-.macro CS_UP
-	NOP
-	NOP
-	SET	CHIP_SELECT
-	NOP
-	NOP
-.endm
-
-
-.macro CS_DOWN
-	NOP
-	NOP
-	CLR	CHIP_SELECT
-	NOP
-	NOP
-.endm
-
-
-.macro READ_ISR
-	CS_DOWN
-	SEND_SPI ISR_REGISTER_ADDRESS,8
-	RECEIVE_SPI 8
-	CS_UP
-.endm
-
-
-.macro READ_LSR
-	CS_DOWN
-	SEND_SPI 0x04,8
-	RECEIVE_SPI 8
-	CS_UP
-.endm
-
-.macro READ_STS
-	CS_DOWN
-	SEND_SPI 0x08,8
-	RECEIVE_SPI 8
-	CS_UP
-.endm
-
-
-.macro RESET_FIFO_UART
-	CS_DOWN
-	SEND_SPI 0x8a,8 		// MODE 2 Address
-	SEND_SPI 0x02,8			// Reset FIFO
-	CS_UP
-	NOP
-	NOP
-	CS_DOWN
-	SEND_SPI 0x8a,8 		// MODE 2 Address
-	SEND_SPI MODE_2,8		// Return from reset FIFO
-	CS_UP
-.endm
-
-
-.macro RESET_UART
-	CS_DOWN
-	SEND_SPI 0x8a,8 		// MODE 2 Address
-	SEND_SPI 0x01,8			// Reset FIFO
-	CS_UP
-	NOP
-	NOP
-	CS_DOWN
-	SEND_SPI 0x8a,8 		// MODE 2 Address
-	SEND_SPI MODE_2,8		// Return from reset FIFO
-	CS_UP
 .endm

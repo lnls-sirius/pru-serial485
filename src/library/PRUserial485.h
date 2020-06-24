@@ -45,6 +45,16 @@ extern "C" {
 
 
 
+void set_FeedForward_enabled(int status);
+
+int FeedForward_status();
+
+void set_FeedForward_step(uint32_t step);
+
+uint32_t read_FeedForward_step(int blocking);
+
+
+
 /* ENDERECO DA PLACA
  * --Retorno--
  * Retorna o endereco fisico da placa, selecionado em hardware.

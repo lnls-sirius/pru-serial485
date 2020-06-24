@@ -241,7 +241,7 @@ PyObject* pru_recv(PyObject* self, PyObject *args)
         PyErr_SetString(PyExc_TypeError, "Bytes to read must be a positive int value");
         return NULL;
     }
-    
+
 
     recv_data_PRU(data, &data_size, bytes2read);
 
@@ -269,6 +269,54 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 }
 
 
+
+
+// ------------------------------------------------------------------------------------------------
+// void PRUserial485_set_curve_block(block) -> void set_curve_block(uint8_t block)
+// ------------------------------------------------------------------------------------------------
+PyObject* set_FeedForwardEnabled(PyObject* self, PyObject *args)
+{
+    int status;
+
+ 	if (!PyArg_ParseTuple(args, "i", &status))
+    {
+ 		return NULL;
+ 	}
+    set_FeedForward_enabled(status);
+    return Py_BuildValue("s", NULL);
+}
+
+PyObject* set_FeedForwardStep(PyObject* self, PyObject *args)
+{
+    int step;
+
+ 	if (!PyArg_ParseTuple(args, "i", &step))
+    {
+ 		return NULL;
+ 	}
+    set_FeedForward_step(step);
+    return Py_BuildValue("s", NULL);
+}
+
+
+PyObject* read_FeedForwardStep(PyObject* self, PyObject *args)
+{
+    int blocking;
+
+ 	if (!PyArg_ParseTuple(args, "i", &blocking))
+    {
+ 		blocking = 0;
+ 	}
+    uint32_t step = read_FeedForward_step(blocking);
+    return Py_BuildValue("l", step);
+}
+
+PyObject* ff_status(PyObject* self, PyObject *args)
+{
+     return Py_BuildValue("i", FeedForward_status());
+}
+
+
 // ------------------------------------------------------------------------------------------------
 // Python Module definitions, methods and initialization
 // ------------------------------------------------------------------------------------------------
@@ -290,6 +338,10 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_write",                  (PyCFunction)pru_send,                    METH_VARARGS, NULL},
     {"PRUserial485_read",                   (PyCFunction)pru_recv,                    METH_VARARGS, NULL},
     {"PRUserial485_read_flush",             (PyCFunction)pru_recv_flush,              METH_VARARGS, NULL},
+    {"PRUserial485_FF_enable",              (PyCFunction)set_FeedForwardEnabled,      METH_VARARGS, NULL},
+    {"PRUserial485_FF_status",              (PyCFunction)ff_status,                   METH_VARARGS, NULL},
+    {"PRUserial485_set_FF_step",            (PyCFunction)set_FeedForwardStep,         METH_VARARGS, NULL},
+    {"PRUserial485_read_FF_step",           (PyCFunction)read_FeedForwardStep,        METH_VARARGS, NULL},
     {"__version__",                         (PyCFunction)pru_version,                 METH_VARARGS, NULL},
     {NULL}
 };

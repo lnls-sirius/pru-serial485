@@ -618,7 +618,7 @@ DATA_READY:
     SBCO        I, SHRAM_BASE, 1, 1                             // Confirma Dados Recebidos prudata[1]=0x00
 
     MOV         r31.b0, PRU1_ARM_INTERRUPT+16
-    MOV         r31.b0, PRU0_ARM_INTERRUPT+16
+//    MOV         r31.b0, PRU0_ARM_INTERRUPT+16
 
     JMP         PROCEDURE_START_MASTER
 // ------------------------------------------------------------------------------------------------
