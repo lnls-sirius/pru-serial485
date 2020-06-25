@@ -286,20 +286,20 @@ PyObject* set_FeedForwardEnabled(PyObject* self, PyObject *args)
     return Py_BuildValue("s", NULL);
 }
 
-PyObject* set_FeedForwardStep(PyObject* self, PyObject *args)
+PyObject* set_FeedForwardPosition(PyObject* self, PyObject *args)
 {
-    int step;
+    int position;
 
- 	if (!PyArg_ParseTuple(args, "i", &step))
+ 	if (!PyArg_ParseTuple(args, "i", &position))
     {
  		return NULL;
  	}
-    set_FeedForward_step(step);
+    set_FeedForward_position(position);
     return Py_BuildValue("s", NULL);
 }
 
 
-PyObject* read_FeedForwardStep(PyObject* self, PyObject *args)
+PyObject* read_FeedForwardPosition(PyObject* self, PyObject *args)
 {
     int blocking;
 
@@ -307,8 +307,8 @@ PyObject* read_FeedForwardStep(PyObject* self, PyObject *args)
     {
  		blocking = 0;
  	}
-    uint32_t step = read_FeedForward_step(blocking);
-    return Py_BuildValue("l", step);
+    uint32_t position = read_FeedForward_position(blocking);
+    return Py_BuildValue("l", position);
 }
 
 PyObject* ff_status(PyObject* self, PyObject *args)
@@ -340,8 +340,8 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_read_flush",             (PyCFunction)pru_recv_flush,              METH_VARARGS, NULL},
     {"PRUserial485_FF_enable",              (PyCFunction)set_FeedForwardEnabled,      METH_VARARGS, NULL},
     {"PRUserial485_FF_status",              (PyCFunction)ff_status,                   METH_VARARGS, NULL},
-    {"PRUserial485_set_FF_step",            (PyCFunction)set_FeedForwardStep,         METH_VARARGS, NULL},
-    {"PRUserial485_read_FF_step",           (PyCFunction)read_FeedForwardStep,        METH_VARARGS, NULL},
+    {"PRUserial485_set_FF_position",        (PyCFunction)set_FeedForwardPosition,     METH_VARARGS, NULL},
+    {"PRUserial485_read_FF_position",       (PyCFunction)read_FeedForwardPosition,    METH_VARARGS, NULL},
     {"__version__",                         (PyCFunction)pru_version,                 METH_VARARGS, NULL},
     {NULL}
 };

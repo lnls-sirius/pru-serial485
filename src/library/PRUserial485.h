@@ -49,9 +49,9 @@ void set_FeedForward_enabled(int status);
 
 int FeedForward_status();
 
-void set_FeedForward_step(uint32_t step);
+void set_FeedForward_position(uint32_t position);
 
-uint32_t read_FeedForward_step(int blocking);
+uint32_t read_FeedForward_position(int blocking);
 
 
 

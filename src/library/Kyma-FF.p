@@ -83,21 +83,21 @@ KYMA_START:
     WBS         KYMA_PRIMARY_INPUT
 
 // Got Triggered! Check Secondary Input
-    QBBS        STRAIGHT_MOVE, KYMA_SECONDARY_INPUT // If 1, straight movement
-    QBBC        FORWARD_MOVE, KYMA_SECONDARY_INPUT  // If 0, forward movement
-
-
-STRAIGHT_MOVE:
-    LBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Load current step
-    ADD         I,I,1
-    SBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Store step++
-    MOV         r31.b0, PRU0_ARM_INTERRUPT+16
-    JMP         KYMA_START
+    QBBS        FORWARD_MOVE, KYMA_SECONDARY_INPUT // If 1, straight movement
+    QBBC        STRAIGHT_MOVE, KYMA_SECONDARY_INPUT  // If 0, forward movement
 
 
 FORWARD_MOVE:
     LBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Load current step
     SUB         I,I,1
+    SBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Store step++
+    MOV         r31.b0, PRU0_ARM_INTERRUPT+16
+    JMP         KYMA_START
+
+
+STRAIGHT_MOVE:
+    LBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Load current step
+    ADD         I,I,1
     SBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Store step--
     MOV         r31.b0, PRU0_ARM_INTERRUPT+16
     JMP         KYMA_START

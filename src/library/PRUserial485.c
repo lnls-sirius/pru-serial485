@@ -221,29 +221,29 @@ int FeedForward_status(){
     }
 }
 
-void set_FeedForward_step(uint32_t step){
+void set_FeedForward_position(uint32_t position){
     if(prudata[86] == 0)
     {
-        prudata[87] = (step);        // LSByte do new_pointer [7..0]
-        prudata[88] = (step) >> 8;   // Byte do new_pointer [15..8]
-        prudata[89] = (step) >> 16;  // Byte do new_pointer [23..16]
-        prudata[90] = (step) >> 24;  // MSByte do new_pointer [31..24]
+        prudata[87] = (position);        // LSByte do new_pointer [7..0]
+        prudata[88] = (position) >> 8;   // Byte do new_pointer [15..8]
+        prudata[89] = (position) >> 16;  // Byte do new_pointer [23..16]
+        prudata[90] = (position) >> 24;  // MSByte do new_pointer [31..24]
 
-        while (((prudata[90]<<24) + (prudata[89]<<16) + (prudata[88]<<8) + prudata[87]) != step){
+        while (((prudata[90]<<24) + (prudata[89]<<16) + (prudata[88]<<8) + prudata[87]) != position){
         }
     }
 }
 
-uint32_t read_FeedForward_step(int blocking){
-    uint32_t step = 0;
+uint32_t read_FeedForward_position(int blocking){
+    uint32_t position = 0;
     // ----- Aguarda sinal de finalizacao do ciclo
     if(blocking)
     {
         prussdrv_pru_wait_event(PRU_EVTOUT_0);
         prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
     }
-    step = ((prudata[90] << 24) + (prudata[89] << 16) + (prudata[88] << 8) + prudata[87]);
-    return step;
+    position = ((prudata[90] << 24) + (prudata[89] << 16) + (prudata[88] << 8) + prudata[87]);
+    return position;
 }
 
 
