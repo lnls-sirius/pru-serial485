@@ -45,9 +45,11 @@ extern "C" {
 
 
 
-void set_FeedForward_enabled(int status);
+void set_FeedForward_enabled(uint8_t status);
 
 int FeedForward_status();
+
+int read_FeedForward_current_state();
 
 void set_FeedForward_position(uint32_t position);
 

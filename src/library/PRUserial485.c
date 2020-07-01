@@ -90,8 +90,9 @@ Date: May/2020
 *        | 0xC1 - Continuous curve sequence & Intercalated read messages
 *        | 0xCE - Continuous curve sequence & Read messages at End of curve
 *        | 0x5B - Single Sequence - Single Broadcast Function command
-* prudata[86] = Feed-forward status (0 disabled - 255 enabled)
+* prudata[86] = Feed-forward status (0 disabled - 1, 2, 3 enabled)
 * prudata[87..90] = Feed-forward position
+* prudata[91] = Current FF state (1 to 4)
 *
 * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
 *
@@ -198,27 +199,26 @@ uint32_t read_curve_pointer(){
 }
 
 
-void set_FeedForward_enabled(int status)
+void set_FeedForward_enabled(uint8_t status)
 {
-    if(status)
+    if(status) < 0x05)
     {
-        // ENABLED
-        prudata[86] = 0xFF;
+        // 0: DISABLED - 1, 2, 3, 4: ENABLED
+        prudata[86] = status;
     }
     else
     {
-        // DISABLED
+        // DISABLED - UNKNOWN MODE
         prudata[86] = 0x00;
     }
 }
 
 int FeedForward_status(){
-    if(prudata[86] == 0x00){
-        return 0;
-    }
-    if(prudata[86] == 0xff){
-        return 1;
-    }
+    return(prudata[86]);
+}
+
+int read_FeedForward_current_state(){
+    return(prudata[91]);
 }
 
 void set_FeedForward_position(uint32_t position){
@@ -683,6 +683,7 @@ int init_start_PRU(int baudrate, char mode){
     // ----- Inicializacao MASTER: procedimento sincrono desabilitado e RxTimeOut = 2 bytes
     if(prudata[25]=='M'){
         set_sync_stop_PRU();
+        prudata[1] = MENSAGEM_ANTIGA;
         prudata[32] = 0x02;
     }
 
@@ -822,6 +823,10 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
     timeout_inst = timeout_ms*66600;
     timeout_instructions = (int)timeout_inst;
+
+    // ----- Wait until send data is avalable - Do not interrupt concurrent write process
+    //while(prudata[1] != MENSAGEM_ANTIGA);
+
 
     // ----- MASTER: Configuracao do Timeout
     if(prudata[25]=='M'){
