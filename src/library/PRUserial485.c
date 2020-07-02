@@ -682,6 +682,7 @@ int init_start_PRU(int baudrate, char mode){
 
     // ----- Inicializacao MASTER: procedimento sincrono desabilitado e RxTimeOut = 2 bytes
     if(prudata[25]=='M'){
+        prudata[1]=MENSAGEM_ANTIGA;
         set_sync_stop_PRU();
         prudata[32] = 0x02;
     }
@@ -823,6 +824,11 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     timeout_inst = timeout_ms*66600;
     timeout_instructions = (int)timeout_inst;
 
+    // ----- Wait until previous message is sent
+    while(prudata[1] != MENSAGEM_ANTIGA);
+
+
+
     // ----- MASTER: Configuracao do Timeout
     if(prudata[25]=='M'){
         prudata[6] = timeout_instructions;        // LSByte do timeout_instructions [7..0]
@@ -848,13 +854,6 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
 
     // ----- Aguarda sinal de finalizacao do ciclo
-/*    pthread_mutex_lock(&incoming_data_function);
-    pthread_mutex_lock(&incoming_data_thread);
-    pthread_mutex_unlock(&incoming_data_thread);
-    pthread_mutex_unlock(&incoming_data_function);*/
-    //prussdrv_pru_wait_event(PRU_EVTOUT_1);
-    //prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
-
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
     if(prudata[25] == 'M'){
         while(prudata[1] != MENSAGEM_ANTIGA);
