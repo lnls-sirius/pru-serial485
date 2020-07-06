@@ -1,42 +1,23 @@
 // ----- Kyma Feed-Forward -----
-// June 23 2020
+// July 06 2020
 
 #define OWN_RAM                         0x000
 #define OTHER_RAM                       0x020
 #define SHARED_RAM                      0x100
 
-#define OFFSET_SHRAM_SYNC               0x32                    // 50 - Start of sync message
-#define OFFSET_SHRAM_SYNC_COUNT         0x50                    // 80 - Start of sync pulse counting
-#define OFFSET_SHRAM_SYNC_DELAY         29                      // Time between sync and normal command
-#define OFFSET_SHRAM_SYNC_OK            0x54                    // 84 - Sync OK
-#define OFFSET_SHRAM_SYNC_MODE          0x55                    // 85 - Sync Mode
 #define OFFSET_FF_ENABLED               0x56                    // 86 - Feedforward status (0xff if enabled)
 #define OFFSET_FF_STEP                  0x57                    // 87 - FeedForward step
+#define OFFSET_FF_CURRENT_STATE         0x5B                    // 91 - FeedForward Current State
 
-
-
-
-#define KYMA_PRIMARY_INPUT              r31.t15                 // P8.15
-#define KYMA_SECONDARY_INPUT            r31.t14                 // P8.16
-
-
+#define KYMA_A_INPUT                    r31.t15                 // P8.15
+#define KYMA_B_INPUT                    r31.t14                 // P8.16
 
 #define DDR_POINTER                     r12
 #define DDR_BASE                        r9
-#define CURVE                           r11
-#define CURVE_SIZE                      r8
 #define FF_STEP                         r16
-#define B                               r17
-#define K                               r18
 #define I                               r25
-#define J                               r28
 #define OPERATION_MODE                  r15
-
-#define ENABLED_SYNC                    0xFF
-#define DISABLED_SYNC                   0x00
-
 #define FF_MODE                         0xFF
-
 
 
 .setcallreg r29.w0                                              // PC saving register (CALL instructions)
@@ -48,7 +29,6 @@
 
 
 START:
-
 // ----- Initial Configuration --------------------------------------------------------------------
     NOP
 
@@ -67,37 +47,177 @@ START:
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 // :::::::::::::::::::::::::: KYMA FEED-FORWARD :::::::::::::::::::::::::::::::::::::::::::::::::::
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
+//        Quadrature Encoder State Machine
+//
+//       ---------        ++      ---------
+//      | STATE 1 |------------->| STATE 2 |
+//      |         |              |         |
+//      |   A B   |       --     |   A B   |
+//      |   0 0   |<-------------|   0 1   |
+//       ---------                ---------
+//        ^     |                  ^     |
+//        |     |                  |     |
+//     ++ |     | --            -- |     | ++
+//        |     |                  |     |
+//        |     V                  |     V
+//       ---------        --      ---------
+//      | STATE 3 |------------->| STATE 4 |
+//      |         |              |         |
+//      |   A B   |       ++     |   A B   |
+//      |   1 0   |<-------------|   1 1   |
+//       ---------                ---------
+//
 
 // ~~~~~ Verifica modo de operacao Master ~~
 KYMA_START:
     ZERO        &I, 4
-    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0xFF : Modo FeedForward
-    QBNE        KYMA_START, I, FF_MODE               // 0x00 : Modo Normal
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x00 : Modo Normal
+    QBEQ        KYMA_START, I, 0x00                  // 
+
+    // Verifica Estado Inicial
+    ZERO        &I, 4
+    ADD         I, I, KYMA_A_INPUT
+    LSL         I, I, 1
+    ADD         I, I, KYMA_B_INPUT
+
+    QBEQ        STATE_1, I, 0x00
+    QBEQ        STATE_2, I, 0x01
+    QBEQ        STATE_3, I, 0x03
+    QBEQ        STATE_4, I, 0x02
+    JMP         KYMA_START
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
+// ----------------------------------------------------------------------------
+// STATE 1
+// 00 -> 01 (+)     ||     00 -> 10 (-)
+// ----------------------------------------------------------------------------
+STATE_1:
+    ZERO        &I, 4
+    ADD         I, I, 1
+    SBCO        I, SHRAM_BASE, OFFSET_FF_CURRENT_STATE, 1       // Store current Machine State
 
-// Wait Trigger from primary input (from Kyma Encoder)
-    WBC         KYMA_PRIMARY_INPUT
-    WBS         KYMA_PRIMARY_INPUT
+STATE_1_WAIT:
+    QBBS        STATE_1_POS, KYMA_B_INPUT
+    QBBS        STATE_1_NEG, KYMA_A_INPUT
+    JMP         STATE_1_WAIT
 
-// Got Triggered! Check Secondary Input
-    QBBS        FORWARD_MOVE, KYMA_SECONDARY_INPUT // If 1, straight movement
-    QBBC        STRAIGHT_MOVE, KYMA_SECONDARY_INPUT  // If 0, forward movement
+STATE_1_POS:
+    CALL        STRAIGHT_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_2
+
+STATE_1_NEG:
+    CALL        FORWARD_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_4
 
 
+// ----------------------------------------------------------------------------
+// STATE 2
+// 01 -> 11 (+)     ||     01 -> 00 (-)
+// ----------------------------------------------------------------------------
+STATE_2:
+    ZERO        &I, 4
+    ADD         I, I, 2
+    SBCO        I, SHRAM_BASE, OFFSET_FF_CURRENT_STATE, 1       // Store current Machine State
+
+STATE_2_WAIT:
+    QBBS        STATE_2_POS, KYMA_A_INPUT
+    QBBC        STATE_2_NEG, KYMA_B_INPUT
+    JMP         STATE_2_WAIT
+
+
+STATE_2_POS:
+    CALL        STRAIGHT_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_3
+
+STATE_2_NEG:
+    CALL        FORWARD_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_1
+
+
+// ----------------------------------------------------------------------------
+// STATE 3
+// 11 -> 10 (+)     ||     11 -> 01 (-)
+// ----------------------------------------------------------------------------
+STATE_3:
+    ZERO        &I, 4
+    ADD         I, I, 3
+    SBCO        I, SHRAM_BASE, OFFSET_FF_CURRENT_STATE, 1       // Store current Machine State
+
+STATE_3_WAIT:
+    QBBC        STATE_3_POS, KYMA_B_INPUT
+    QBBC        STATE_3_NEG, KYMA_A_INPUT
+    JMP         STATE_3_WAIT
+
+STATE_3_POS:
+    CALL        STRAIGHT_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_4
+
+STATE_3_NEG:
+    CALL        FORWARD_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_2
+
+ 
+// ----------------------------------------------------------------------------
+// STATE 4
+// 10 -> 00 (+)     ||     10 -> 11 (-)
+// ----------------------------------------------------------------------------
+STATE_4:
+    ZERO        &I, 4
+    ADD         I, I, 4
+    SBCO        I, SHRAM_BASE, OFFSET_FF_CURRENT_STATE, 1       // Store current Machine State
+
+STATE_4_WAIT:
+    QBBC        STATE_4_POS, KYMA_A_INPUT
+    QBBS        STATE_4_NEG, KYMA_B_INPUT
+    JMP         STATE_4_WAIT
+
+STATE_4_POS:
+    CALL        STRAIGHT_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_1
+
+STATE_4_NEG:
+    CALL        FORWARD_MOVE
+    ZERO        &I, 4
+    LBCO        I, SHRAM_BASE, OFFSET_FF_ENABLED, 1  // 0x01, 0x02, 0x03 and 0x04: Modo FeedForward
+    QBEQ        KYMA_START, I, 0x00                  // 0x00 : Modo Normal
+    JMP         STATE_3
+
+
+// .............................................................................
+// SUBROUTINES TO TREAT STEPS
+// .............................................................................
 FORWARD_MOVE:
     LBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Load current step
     SUB         I,I,1
     SBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Store step++
     MOV         r31.b0, PRU0_ARM_INTERRUPT+16
-    JMP         KYMA_START
-
+    RET
 
 STRAIGHT_MOVE:
     LBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Load current step
     ADD         I,I,1
     SBCO        I, SHRAM_BASE, OFFSET_FF_STEP,4        // Store step--
     MOV         r31.b0, PRU0_ARM_INTERRUPT+16
-    JMP         KYMA_START
+    RET

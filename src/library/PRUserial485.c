@@ -201,16 +201,7 @@ uint32_t read_curve_pointer(){
 
 void set_FeedForward_enabled(uint8_t status)
 {
-    if(status) < 0x05)
-    {
-        // 0: DISABLED - 1, 2, 3, 4: ENABLED
-        prudata[86] = status;
-    }
-    else
-    {
-        // DISABLED - UNKNOWN MODE
-        prudata[86] = 0x00;
-    }
+    prudata[86] = status;
 }
 
 int FeedForward_status(){
