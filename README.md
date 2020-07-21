@@ -11,7 +11,7 @@ _____
 
 ### Building the library
 
-Enter the folder `src` and run the script `library_build.sh`. This will compile PRU and host codes, install it to your Beaglebone and create a Python module to use these libraries.
+Enter the folder `src` and run `make install`. This will compile PRU and host codes, install it to your Beaglebone and create a Python module to use these libraries.
 
 
 
