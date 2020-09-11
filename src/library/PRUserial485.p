@@ -519,11 +519,15 @@ WAIT_RECEIVED:
     ADD         I,OFFSET_SHRAM_WRITE, 3                         // I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
 
 
+// Timer auxiliar para RxTimeout
+    ZERO        &K, 4
 
 // Le RxLevel até ser >= 64 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
 RXLEVEL_AND_TIMEOUT:
 
     QBBC        STORE_LEFTBYTES, IRQ                            // RxTimeout Interrupt. Fim de mensagem.
+
+    ADD         K, K, 1
 
     // Le Rx FIFO Level
     CS_DOWN
@@ -531,8 +535,25 @@ RXLEVEL_AND_TIMEOUT:
     RECEIVE_SPI 8
     CS_UP
 
+    // Get data size
+    ZERO        &J,4
+    ADD         J,OFFSET_SHRAM_WRITE,3                          // J = 0x1803
+    SUB         I, I, J                                         // I = I - J = tamanho
+    QBNE	WAIT_RX_BUFF, I, 0				// Verifica dados se tamanho armazenado ainda == 0
+
+
+    // Verifica se tamanho atual do FIFO MAX3107 != 0:
+    QBNE        WAIT_RX_BUFF, BUFFER_SPI_IN.w0, 0
+
+    // Se tamanho armazenado já é != 0, verifica contador K:
+    QBEQ        STORE_DATA_SIZE, K, 100                         // Caso dados recebidos sejam multiplos dos blocos armazenados (64 B), esse eh o timeout!
+                                                                // Contador de 0 a 100 ciclos do loop RXLEVEL_AND_TIMEOUT
+
+WAIT_RX_BUFF:
     LSR         BUFFER_SPI_IN, BUFFER_SPI_IN, 6
     QBEQ        RXLEVEL_AND_TIMEOUT, BUFFER_SPI_IN, 0           // Aguarda Buffer TX >= 0x0100 0000 = 64
+
+
 
 
  // Armazena 64 bytes na SHRAM
@@ -549,6 +570,8 @@ STORE_64_MEMORY:
 
     QBNE        STORE_64_MEMORY,J,0x40                          // Se J == 64, termina loop
     CS_UP
+
+    ZERO        &J,4
 
     JMP         RXLEVEL_AND_TIMEOUT
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -578,6 +601,7 @@ STORE_LAST64_MEMORY:
 
 
  // ~~~~~ TAMANHO DOS DADOS ~~~~~~~~~~~~~~~~
+STORE_DATA_SIZE:
     ZERO        &J,4
     ADD         J,OFFSET_SHRAM_WRITE,3                          // J = 0x1803
     SUB         I, I, J                                         // I = I - J = tamanho
