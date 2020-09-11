@@ -535,13 +535,6 @@ RXLEVEL_AND_TIMEOUT:
     RECEIVE_SPI 8
     CS_UP
 
-    // Get data size
-//    ZERO        &J,4
-//    ZERO        &A,4
-//    ADD         J,OFFSET_SHRAM_WRITE,3                          // J = 0x1803
-//    SUB         A, I, J                                         // A = I - J = tamanho
-    QBNE	WAIT_RX_BUFF, BUFFER_SPI_IN, 0 			// Verifica dados se tamanho armazenado ainda == 0
-
 
     // Verifica se tamanho atual do FIFO MAX3107 != 0:
     QBNE        WAIT_RX_BUFF, BUFFER_SPI_IN, 0
