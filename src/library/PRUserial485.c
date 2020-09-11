@@ -508,6 +508,7 @@ void *monitorRecvBuffer(void *arg){
             for(idx=0; idx<4; idx++){
                 tamanho += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
             }
+            printf("%d\n",tamanho);
             // Dados
             for(idx=0; idx<tamanho; idx++){
                 receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+idx];
@@ -553,6 +554,8 @@ void *monitorRecvBuffer(void *arg){
             else{
                 tamanho = (BUFF_RECV_STOP - BUFF_RECV_START) - (os_recv_pointer - pru_recv_pointer);
             }
+
+
 
             pthread_mutex_lock(&lock);
 
