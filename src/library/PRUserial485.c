@@ -508,7 +508,6 @@ void *monitorRecvBuffer(void *arg){
             for(idx=0; idx<4; idx++){
                 tamanho += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
             }
-            printf("%d\n",tamanho);
             // Dados
             for(idx=0; idx<tamanho; idx++){
                 receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+idx];

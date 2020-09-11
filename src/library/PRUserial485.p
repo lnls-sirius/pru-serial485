@@ -536,14 +536,15 @@ RXLEVEL_AND_TIMEOUT:
     CS_UP
 
     // Get data size
-    ZERO        &J,4
-    ADD         J,OFFSET_SHRAM_WRITE,3                          // J = 0x1803
-    SUB         J, I, J                                         // J = I - J = tamanho
-    QBNE	WAIT_RX_BUFF, J, 0				// Verifica dados se tamanho armazenado ainda == 0
+//    ZERO        &J,4
+//    ZERO        &A,4
+//    ADD         J,OFFSET_SHRAM_WRITE,3                          // J = 0x1803
+//    SUB         A, I, J                                         // A = I - J = tamanho
+    QBNE	WAIT_RX_BUFF, BUFFER_SPI_IN, 0 			// Verifica dados se tamanho armazenado ainda == 0
 
 
     // Verifica se tamanho atual do FIFO MAX3107 != 0:
-    QBNE        WAIT_RX_BUFF, BUFFER_SPI_IN.w0, 0
+    QBNE        WAIT_RX_BUFF, BUFFER_SPI_IN, 0
 
     // Se tamanho armazenado já é != 0, verifica contador K:
     QBEQ        STORE_DATA_SIZE, K, 100                         // Caso dados recebidos sejam multiplos dos blocos armazenados (64 B), esse eh o timeout!
