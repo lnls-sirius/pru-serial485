@@ -25,7 +25,7 @@ Date: May/2020
 #define PRU_NUM             1
 #define KYMA_PRU_NUM        0
 #define PRU_BINARY          "/usr/bin/PRUserial485.bin"
-#define KYMA_PRU_BINARY     "/usr/bin/Kyma-FF.bin"
+#define KYMA_PRU_BINARY     "/usr/bin/Kyma-Encoder.bin"
 #define OFFSET_SHRAM_WRITE  0x64    // 100 general purpose bytes
 #define OFFSET_SHRAM_READ   0x1800  //
 
@@ -70,7 +70,7 @@ Date: May/2020
 *
 * prudata[10..13] = Ponteiro para próximo ponto da curva a ser executado
 * prudata[15..18] = Endereco absoluto do bloco alocado na memoria DDR (armazenamento de curvas)
-* prudata[20..23] = Tamanho total em bytes das quatro curvas
+* prudata[20..23] = Tamanho reply_buffer em bytes das quatro curvas
 *
 * prudata[24] = Board hardware address
 * prudata[25] = Master/Slave ('M'/'S')
@@ -90,8 +90,8 @@ Date: May/2020
 *        | 0xC1 - Continuous curve sequence & Intercalated read messages
 *        | 0xCE - Continuous curve sequence & Read messages at End of curve
 *        | 0x5B - Single Sequence - Single Broadcast Function command
-* prudata[86] = Feed-forward status (0 disabled - 1, 2, 3 enabled)
-* prudata[87..90] = Feed-forward position
+* prudata[86] = Kyma-Encoder status (0 disabled - 1, 2, 3 enabled)
+* prudata[87..90] = Kyma-Encoder position
 * prudata[91] = Current FF state (1 to 4)
 *
 * SHRAM[100] ~ SHRAM[6k-1] - Sending Data
@@ -199,20 +199,20 @@ uint32_t read_curve_pointer(){
 }
 
 
-void set_FeedForward_enabled(uint8_t status)
+void set_KymaEncoder_enable(uint8_t status)
 {
     prudata[86] = status;
 }
 
-int FeedForward_status(){
+int KymaEncoder_status(){
     return(prudata[86]);
 }
 
-int read_FeedForward_current_state(){
+int read_KymaEncoder_current_state(){
     return(prudata[91]);
 }
 
-void set_FeedForward_position(uint32_t position){
+void set_KymaEncoder_position(uint32_t position){
     if(prudata[86] == 0)
     {
         prudata[87] = (position);        // LSByte do new_pointer [7..0]
@@ -225,7 +225,7 @@ void set_FeedForward_position(uint32_t position){
     }
 }
 
-uint32_t read_FeedForward_position(int blocking){
+uint32_t read_KymaEncoder_position(int blocking){
     uint32_t position = 0;
     // ----- Aguarda sinal de finalizacao do ciclo
     if(blocking)

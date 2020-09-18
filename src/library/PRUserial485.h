@@ -45,15 +45,15 @@ extern "C" {
 
 
 
-void set_FeedForward_enabled(uint8_t status);
+void set_KymaEncoder_enable(uint8_t status);
 
-int FeedForward_status();
+int KymaEncoder_status();
 
-int read_FeedForward_current_state();
+int read_KymaEncoder_current_state();
 
-void set_FeedForward_position(uint32_t position);
+void set_KymaEncoder_position(uint32_t position);
 
-uint32_t read_FeedForward_position(int blocking);
+uint32_t read_KymaEncoder_position(int blocking);
 
 
 

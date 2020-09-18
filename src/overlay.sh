@@ -2,7 +2,7 @@
 
 
 #DDR size for PRU serial interface: 2 097 152 bytes
-modprobe uio_pruss extram_pool_sz=0x200000
+#modprobe uio_pruss extram_pool_sz=0x200000
 
 KERNEL_VERSION=`uname -r`;
 if [ "${KERNEL_VERSION%.*}" = "3.8" ]; then

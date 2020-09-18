@@ -274,7 +274,7 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 // ------------------------------------------------------------------------------------------------
 // void PRUserial485_set_curve_block(block) -> void set_curve_block(uint8_t block)
 // ------------------------------------------------------------------------------------------------
-PyObject* set_FeedForwardEnabled(PyObject* self, PyObject *args)
+PyObject* set_KymaEncoderEnabled(PyObject* self, PyObject *args)
 {
     int status;
 
@@ -282,11 +282,11 @@ PyObject* set_FeedForwardEnabled(PyObject* self, PyObject *args)
     {
  		return NULL;
  	}
-    set_FeedForward_enabled(status);
+    set_KymaEncoder_enable(status);
     return Py_BuildValue("s", NULL);
 }
 
-PyObject* set_FeedForwardPosition(PyObject* self, PyObject *args)
+PyObject* set_KymaEncoderPosition(PyObject* self, PyObject *args)
 {
     int position;
 
@@ -294,12 +294,12 @@ PyObject* set_FeedForwardPosition(PyObject* self, PyObject *args)
     {
  		return NULL;
  	}
-    set_FeedForward_position(position);
+    set_KymaEncoder_position(position);
     return Py_BuildValue("s", NULL);
 }
 
 
-PyObject* read_FeedForwardPosition(PyObject* self, PyObject *args)
+PyObject* read_KymaEncoderPosition(PyObject* self, PyObject *args)
 {
     int blocking;
 
@@ -307,18 +307,18 @@ PyObject* read_FeedForwardPosition(PyObject* self, PyObject *args)
     {
  		blocking = 0;
  	}
-    uint32_t position = read_FeedForward_position(blocking);
+    uint32_t position = read_KymaEncoder_position(blocking);
     return Py_BuildValue("l", position);
 }
 
-PyObject* ff_status(PyObject* self, PyObject *args)
+PyObject* encoder_status(PyObject* self, PyObject *args)
 {
-     return Py_BuildValue("i", FeedForward_status());
+     return Py_BuildValue("i", KymaEncoder_status());
 }
 
-PyObject* FeedForward_current_state(PyObject* self, PyObject *args)
+PyObject* KymaEncoder_current_state(PyObject* self, PyObject *args)
 {
-     return Py_BuildValue("i", read_FeedForward_current_state());
+     return Py_BuildValue("i", read_KymaEncoder_current_state());
 }
 
 
@@ -343,11 +343,11 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_write",                  (PyCFunction)pru_send,                          METH_VARARGS, NULL},
     {"PRUserial485_read",                   (PyCFunction)pru_recv,                          METH_VARARGS, NULL},
     {"PRUserial485_read_flush",             (PyCFunction)pru_recv_flush,                    METH_VARARGS, NULL},
-    {"PRUserial485_FF_enable",              (PyCFunction)set_FeedForwardEnabled,            METH_VARARGS, NULL},
-    {"PRUserial485_FF_status",              (PyCFunction)ff_status,                         METH_VARARGS, NULL},
-    {"PRUserial485_set_FF_position",        (PyCFunction)set_FeedForwardPosition,           METH_VARARGS, NULL},
-    {"PRUserial485_read_FF_position",       (PyCFunction)read_FeedForwardPosition,          METH_VARARGS, NULL},
-    {"PRUserial485_read_FF_state",          (PyCFunction)FeedForward_current_state,         METH_VARARGS, NULL},
+    {"PRUserial485_encoder_enable",              (PyCFunction)set_KymaEncoderEnabled,            METH_VARARGS, NULL},
+    {"PRUserial485_encoder_status",              (PyCFunction)encoder_status,                         METH_VARARGS, NULL},
+    {"PRUserial485_set_encoder_position",        (PyCFunction)set_KymaEncoderPosition,           METH_VARARGS, NULL},
+    {"PRUserial485_read_encoder_position",       (PyCFunction)read_KymaEncoderPosition,          METH_VARARGS, NULL},
+    {"PRUserial485_read_encoder_state",          (PyCFunction)KymaEncoder_current_state,         METH_VARARGS, NULL},
     {"__version__",                         (PyCFunction)pru_version,                       METH_VARARGS, NULL},
     {NULL}
 };
