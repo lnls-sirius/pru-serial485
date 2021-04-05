@@ -554,6 +554,8 @@ void *monitorRecvBuffer(void *arg){
                 tamanho = (BUFF_RECV_STOP - BUFF_RECV_START) - (os_recv_pointer - pru_recv_pointer);
             }
 
+
+
             pthread_mutex_lock(&lock);
 
             for(idx=0; idx<tamanho; idx++){
