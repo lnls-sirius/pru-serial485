@@ -23,9 +23,19 @@ Date: May/2020
 
 
 #define PRU_NUM             1
+#define PRU_FF_NUM          0
 #define PRU_BINARY          "/usr/bin/PRUserial485.bin"
+#define PRU_FF_BINARY          "/usr/bin/firmware.bin"
+#define PRU_FF_DATA            "/usr/bin/data.bin"
 #define OFFSET_SHRAM_WRITE  0x64    // 100 general purpose bytes
 #define OFFSET_SHRAM_READ   0x1800  //
+#define OFFSET_SHRAM_FF_MUTEX_485 34
+
+
+#define FF_MUTEX_485_FREE           0
+#define FF_MUTEX_485_FF_ACQUIRED    1
+#define FF_MUTEX_485_ARM_ACQUIRED   2
+
 
 #define MENSAGEM_ANTIGA         0x55
 #define MENSAGEM_RECEBIDA_NOVA  0x00
@@ -45,11 +55,24 @@ Date: May/2020
 #define MMAP0_LOC   "/sys/class/uio/uio0/maps/map0/"
 #define MMAP1_LOC   "/sys/class/uio/uio0/maps/map1/"
 
-#define CURVE_BYTES_PER_BLOCK      100000
-#define CURVE_MAX_POINTS_PER_BLOCK CURVE_BYTES_PER_BLOCK/16
 
-#define MAP_SIZE 0x0FFFFFFF
-#define MAP_MASK (MAP_SIZE)
+#define SHRAM_OFFSET_FF_ENABLED             14
+#define SHRAM_OFFSET_FF_N_TABLES            42
+#define SHRAM_OFFSET_FF_ID_TYPE             43
+#define FF_TABLES_TOTAL_BYTES_RESERVED      600000
+#define FF_MIN_TABLES                       1
+#define FF_MAX_TABLES                       6
+#define FF_DELTA_ID_TYPE                    0
+#define FF_IVU_ID_TYPE                      1
+#define FF_VPU_ID_TYPE                      2
+
+#define CURVE_MAX_BLOCKS                    4
+#define CURVE_BYTES_PER_BLOCK               100000
+#define CURVE_TOTAL_RESERVED_BYTES          CURVE_MAX_BLOCKS*CURVE_MAX_BLOCKS
+#define CURVE_MAX_POINTS_PER_BLOCK          CURVE_BYTES_PER_BLOCK/16
+
+#define MAP_SIZE                            0x0FFFFFFF
+#define MAP_MASK                            (MAP_SIZE)
 
 
 
@@ -111,6 +134,8 @@ volatile uint8_t receive_buffer[BUFF_SIZE];
 volatile uint32_t pru_pointer = 0, read_pointer = 0;
 volatile pthread_t tid = 0;
 volatile uint8_t thread_control = 0;
+volatile int bytes_per_table = 0, max_points_per_table = 0;
+
 pthread_mutex_t lock;
 
 size_t i;
@@ -152,6 +177,222 @@ uint8_t hardware_address_serialPRU(){
 }
 
 
+int load_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4){
+    // ----- DDR address
+    unsigned int DDR_address[2];
+
+    FILE* fp;
+    fp = fopen(MMAP1_LOC "addr", "rt");
+    fscanf(fp, "%x", &DDR_address[0]);
+    fclose(fp);
+
+    fp = fopen(MMAP1_LOC "size", "rt");
+    fscanf(fp, "%x", &DDR_address[1]);
+    fclose(fp);
+
+    int fd;
+    void *map_base, *virt_addr;
+    off_t target = DDR_address[0];
+
+    if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
+        return ERR_LD_CURVE_MOPEN;
+    }
+
+    map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
+    if(map_base == (void *) -1) {
+        return ERR_LD_CURVE_MMAP;
+    }
+
+    uint32_t value1, value2, value3, value4 = 0;
+    float read1, read2, read3, read4 = 0;
+    int i;
+
+    target += ddr_offset;
+
+    for(i=0; i<table_points; i++){
+
+        read1 = curve1[i];
+        read2 = curve2[i];
+        read3 = curve3[i];
+        read4 = curve4[i];
+
+        value1 = (uint32_t)(*(uint32_t*)&read1);
+        value2 = (uint32_t)(*(uint32_t*)&read2);
+        value3 = (uint32_t)(*(uint32_t*)&read3);
+        value4 = (uint32_t)(*(uint32_t*)&read4);
+
+        // ----- CURVA 1
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value1 >> 0;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value1 >> 8;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value1 >> 16;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value1 >> 24;
+
+        target++;
+
+
+        // ----- CURVA 2
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value2 >> 0;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value2 >> 8;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value2 >> 16;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value2 >> 24;
+
+        target++;
+
+
+        // ----- CURVA 3
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value3 >> 0;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value3 >> 8;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value3 >> 16;
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value3 >> 24;
+
+        target++;
+
+
+        // ----- CURVA 4
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value4 >> 0;
+        while((*((uint8_t *) virt_addr)) != ((value4 >> 0)&0xff)){
+        }
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value4 >> 8;
+        while((*((uint8_t *) virt_addr)) != ((value4 >> 8)&0xff)){
+        }
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value4 >> 16;
+        while((*((uint8_t *) virt_addr)) != ((value4 >> 16)&0xff)){
+        }
+
+        target++;
+        virt_addr = map_base + (target & MAP_MASK);
+        *((uint8_t *) virt_addr) = value4 >> 24;
+        while((*((uint8_t *) virt_addr)) != ((value4 >> 24)&0xff)){
+        }
+
+        target++;
+    }
+
+    if(munmap(map_base, MAP_SIZE) == -1) {
+        return ERR_LD_CURVE_UMMAP;
+    }
+
+    close(fd);
+    return OK;
+}
+
+
+uint32_t read_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4){
+    // ----- DDR address
+    unsigned int DDR_address[2];
+
+    FILE* fp;
+    fp = fopen(MMAP1_LOC "addr", "rt");
+    fscanf(fp, "%x", &DDR_address[0]);
+    fclose(fp);
+
+    int fd;
+    void *map_base, *virt_addr;
+    off_t target = DDR_address[0];
+
+    if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
+        return ERR_LD_CURVE_MOPEN;
+    }
+
+    map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
+    if(map_base == (void *) -1) {
+        return ERR_LD_CURVE_MMAP;
+    }
+
+    uint32_t value, vals[4];
+    int i,j;
+
+    target += ddr_offset -1;
+
+    for(i=0; i<table_points; i++){
+    
+        // ----- CURVA 1
+        value = 0;
+        for(j=0;j<4;j++){
+            target++;
+            virt_addr = map_base + (target & MAP_MASK);
+            vals[j] = *((uint8_t *) virt_addr);
+        }
+        value = (vals[3]<<24) + (vals[2]<<16) + (vals[1]<<8) + (vals[0]);
+        curve1[i] = *(float *)&value;
+
+        // ----- CURVA 2
+        value = 0;
+        for(j=0;j<4;j++){
+            target++;
+            virt_addr = map_base + (target & MAP_MASK);
+            vals[j] = *((uint8_t *) virt_addr);
+        }
+        value = (vals[3]<<24) + (vals[2]<<16) + (vals[1]<<8) + (vals[0]);
+        curve2[i] = *(float *)&value;
+
+        // ----- CURVA 3
+        value = 0;
+        for(j=0;j<4;j++){
+            target++;
+            virt_addr = map_base + (target & MAP_MASK);
+            vals[j] = *((uint8_t *) virt_addr);
+        }
+        value = (vals[3]<<24) + (vals[2]<<16) + (vals[1]<<8) + (vals[0]);
+        curve3[i] = *(float *)&value;
+
+        // ----- CURVA 4
+        value = 0;
+        for(j=0;j<4;j++){
+            target++;
+            virt_addr = map_base + (target & MAP_MASK);
+            vals[j] = *((uint8_t *) virt_addr);
+        }
+        value = (vals[3]<<24) + (vals[2]<<16) + (vals[1]<<8) + (vals[0]);
+        curve4[i] = *(float *)&value;
+    }
+
+    if(munmap(map_base, MAP_SIZE) == -1) {
+        return ERR_LD_CURVE_UMMAP;
+    }
+
+    close(fd);
+    return table_points;
+}
+
+
 
 int clear_pulse_count_sync(){
     if(prudata[5]==0x00){     // Sync disabled. Clear pulse counting
@@ -167,7 +408,6 @@ int clear_pulse_count_sync(){
 }
 
 
-
 uint32_t read_pulse_count_sync(){
     uint32_t counting = 0;
     counting = (prudata[83] << 24) + (prudata[82] << 16) + (prudata[81] << 8) + prudata[80];
@@ -175,8 +415,20 @@ uint32_t read_pulse_count_sync(){
 }
 
 
+uint8_t read_shram(uint16_t offset){
+    return prudata[offset];
+}
+
+
+void write_shram(uint16_t offset, uint8_t value){
+    prudata[offset] = value;
+}
+
 
 void set_curve_pointer(uint32_t new_pointer){
+    if(16*new_pointer >= ((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20])){
+        return;
+    }
     prudata[10] = (16*new_pointer);        // LSByte do new_pointer [7..0]
     prudata[11] = (16*new_pointer) >> 8;   // Byte do new_pointer [15..8]
     prudata[12] = (16*new_pointer) >> 16;  // Byte do new_pointer [23..16]
@@ -288,139 +540,18 @@ void close_PRU(){
 }
 
 
-
 int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t CurvePoints, uint8_t block){
 
-    // ----- DDR address
-    unsigned int DDR_address[2];
-
-    FILE* fp;
-    fp = fopen(MMAP1_LOC "addr", "rt");
-    fscanf(fp, "%x", &DDR_address[0]);
-    fclose(fp);
-
-    fp = fopen(MMAP1_LOC "size", "rt");
-    fscanf(fp, "%x", &DDR_address[1]);
-    fclose(fp);
-
-    int fd;
-    void *map_base, *virt_addr;
-    off_t target = DDR_address[0];
-
-    if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1){
-        // printf("Failed to open memory!");
-        return ERR_LD_CURVE_MOPEN;
+    if(block >= CURVE_MAX_BLOCKS){
+        return ERR_CURVE_OVER_BLOCK;
+    }
+    if(CurvePoints > CURVE_MAX_POINTS_PER_BLOCK){
+        return ERR_CURVE_OVER_POINTS;
     }
 
-    map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
-    if(map_base == (void *) -1) {
-        // printf("Failed to map base address");
-        return ERR_LD_CURVE_MMAP;
-    }
+    load_ddr(block*CURVE_BYTES_PER_BLOCK, CurvePoints, curve1, curve2, curve3, curve4);
 
-    uint32_t value1, value2, value3, value4 = 0;
-    float read1, read2, read3, read4 = 0;
-    int i;
-
-    target += block * (CURVE_BYTES_PER_BLOCK);
-
-    for(i=0; i<CurvePoints; i++){
-
-        read1 = curve1[i];
-        read2 = curve2[i];
-        read3 = curve3[i];
-        read4 = curve4[i];
-
-        value1 = (uint32_t)(*(uint32_t*)&read1);
-        value2 = (uint32_t)(*(uint32_t*)&read2);
-        value3 = (uint32_t)(*(uint32_t*)&read3);
-        value4 = (uint32_t)(*(uint32_t*)&read4);
-
-        // ----- CURVA 1
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value1 >> 0;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value1 >> 8;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value1 >> 16;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value1 >> 24;
-
-        target++;
-
-
-        // ----- CURVA 2
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value2 >> 0;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value2 >> 8;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value2 >> 16;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value2 >> 24;
-
-        target++;
-
-
-        // ----- CURVA 3
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value3 >> 0;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value3 >> 8;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value3 >> 16;
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value3 >> 24;
-
-        target++;
-
-
-        // ----- CURVA 4
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value4 >> 0;
-        while((*((uint8_t *) virt_addr)) != ((value4 >> 0)&0xff)){
-        }
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value4 >> 8;
-        while((*((uint8_t *) virt_addr)) != ((value4 >> 8)&0xff)){
-        }
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value4 >> 16;
-        while((*((uint8_t *) virt_addr)) != ((value4 >> 16)&0xff)){
-        }
-
-        target++;
-        virt_addr = map_base + (target & MAP_MASK);
-        *((uint8_t *) virt_addr) = value4 >> 24;
-        while((*((uint8_t *) virt_addr)) != ((value4 >> 24)&0xff)){
-        }
-
-        target++;
-
-    }
-
+    
     if (((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
         // Tamanho em bytes
         prudata[20] = (16*CurvePoints);         // LSByte do tamanho curva [7..0]
@@ -432,21 +563,16 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
         }
     }
 
-    if(munmap(map_base, MAP_SIZE) == -1) {
-        // printf("Failed to unmap memory");
-        return ERR_LD_CURVE_UMMAP;
-    }
-
-    close(fd);
-
-    // printf("%d-point curve successfully loaded.\n", CurvePoints);
-
     return OK;
 }
 
 
-
 void set_curve_block(uint8_t block){
+
+    if(block >= CURVE_MAX_BLOCKS){
+        return;
+    }
+
     unsigned int DDR_address[2];
 
     FILE* fp;
@@ -465,7 +591,6 @@ void set_curve_block(uint8_t block){
 }
 
 
-
 uint8_t read_curve_block(){
     unsigned int DDR_address[2], address;
     uint8_t block = 0;
@@ -481,7 +606,6 @@ uint8_t read_curve_block(){
 
     return block;
 }
-
 
 
 void *monitorRecvBuffer(void *arg){
@@ -503,6 +627,8 @@ void *monitorRecvBuffer(void *arg){
             // ----- Nova mensagem recebida !
             while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
             }
+
+            printf("new msg\r\n");
             // ----- Copia dos dados recebidos
             // Tamanho
             for(idx=0; idx<4; idx++){
@@ -519,6 +645,7 @@ void *monitorRecvBuffer(void *arg){
             }
             // ----- Sinaliza mensagem antiga
             prudata[1] = MENSAGEM_ANTIGA;
+            printf("fim\r\n");
         }
 
         else{
@@ -576,7 +703,6 @@ void *monitorRecvBuffer(void *arg){
         }
     }
 }
-
 
 
 int init_start_PRU(int baudrate, char mode){
@@ -723,11 +849,18 @@ int init_start_PRU(int baudrate, char mode){
     fscanf(fp, "%x", &DDR_address[1]);
     fclose(fp);
 
-    // Endereco da DDR
+    // Endereco da DDR - Sync via PRUserial485
     prudata[15] = (DDR_address[0]) >> 0;    // LSByte [7..0]
     prudata[16] = (DDR_address[0]) >> 8;    // Byte [15..8]
     prudata[17] = (DDR_address[0]) >> 16;   // Byte [23..16]
     prudata[18] = (DDR_address[0]) >> 24;   // MSByte [31..24]
+
+    // Endereco da DDR - FeedForward operations
+    prudata[38] = (DDR_address[0]) >> 0;    // LSByte [7..0]
+    prudata[39] = (DDR_address[0]) >> 8;    // Byte [15..8]
+    prudata[40] = (DDR_address[0]) >> 16;   // Byte [23..16]
+    prudata[41] = (DDR_address[0]) >> 24;   // MSByte [31..24]
+
 
     // ----- Executar codigo na PRU
     prussdrv_exec_program (PRU_NUM, PRU_BINARY);
@@ -754,7 +887,6 @@ int init_start_PRU(int baudrate, char mode){
 }
 
 
-
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
     uint32_t timeout_instructions;
@@ -762,6 +894,12 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
     timeout_inst = timeout_ms*66600;
     timeout_instructions = (int)timeout_inst;
+
+    while(prudata[OFFSET_SHRAM_FF_MUTEX_485] != FF_MUTEX_485_FREE){
+    }
+    prudata[OFFSET_SHRAM_FF_MUTEX_485] = FF_MUTEX_485_ARM_ACQUIRED;
+
+
 
     // ----- MASTER: Configuracao do Timeout
     if(prudata[25]=='M'){
@@ -790,6 +928,8 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     prussdrv_pru_wait_event(PRU_EVTOUT_1);
     prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
 
+
+    printf("recebido!\r\n");
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
     if(prudata[25] == 'M'){
         while(prudata[1] != MENSAGEM_ANTIGA); 
@@ -799,9 +939,10 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     if(prudata[25]=='S'){
         while(prudata[1] != MENSAGEM_ANTIGA);
     }
+
+    prudata[OFFSET_SHRAM_FF_MUTEX_485] = FF_MUTEX_485_FREE;
     return OK;
 }
-
 
 
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho_recv, uint32_t bytes2read){
@@ -837,7 +978,6 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho_recv, uint32_t bytes2read){
 }
 
 
-
 int recv_flush(){
     pthread_mutex_lock(&lock);
     if(pru_pointer != read_pointer){
@@ -845,4 +985,93 @@ int recv_flush(){
     }
     pthread_mutex_unlock(&lock);
     return OK;
+}
+
+
+int ff_configure(uint8_t id_type, uint8_t n_tables){
+
+    if((id_type == FF_DELTA_ID_TYPE) | \
+       (id_type == FF_IVU_ID_TYPE) |   \
+       (id_type == FF_VPU_ID_TYPE)){
+        prudata[SHRAM_OFFSET_FF_ID_TYPE] = id_type;
+    }
+    else{
+        return ERR_FF_IDTYPE;
+    }
+    
+
+    if((n_tables < FF_MIN_TABLES) | (n_tables > FF_MAX_TABLES)){
+        return ERR_FF_TABLE_NUMBER;
+    }
+
+    // Disable FeedForward PRU
+    prussdrv_pru_disable(PRU_FF_NUM);
+
+    // ----- DDR address
+    unsigned int DDR_address[2], ff_init_table_addr;
+
+    FILE* fp;
+    fp = fopen(MMAP1_LOC "addr", "rt");
+    fscanf(fp, "%x", &DDR_address[0]);
+    fclose(fp);
+
+
+    // Endereco da DDR - FeedForward operations
+    ff_init_table_addr = DDR_address[0] + CURVE_TOTAL_RESERVED_BYTES;
+    prudata[38] = (ff_init_table_addr) >> 0;    // LSByte [7..0]
+    prudata[39] = (ff_init_table_addr) >> 8;    // Byte [15..8]
+    prudata[40] = (ff_init_table_addr) >> 16;   // Byte [23..16]
+    prudata[41] = (ff_init_table_addr) >> 24;   // MSByte [31..24]
+
+
+    // Split memory alocation into desired number of tables
+    prudata[SHRAM_OFFSET_FF_N_TABLES] = n_tables;
+    bytes_per_table = FF_TABLES_TOTAL_BYTES_RESERVED / n_tables;
+    max_points_per_table = bytes_per_table / 16;
+
+
+    // ----- Executar codigo na PRU
+    prussdrv_load_datafile(PRU_FF_NUM, PRU_FF_DATA);
+    prussdrv_exec_program (PRU_FF_NUM, PRU_FF_BINARY);
+
+    return OK;
+}
+
+void ff_enable(){
+    write_shram(SHRAM_OFFSET_FF_ENABLED, 1);
+}
+
+void ff_disable(){
+    write_shram(SHRAM_OFFSET_FF_ENABLED, 0);
+}
+
+
+int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table){
+
+    if(table >= prudata[SHRAM_OFFSET_FF_N_TABLES]){
+        return ERR_CURVE_OVER_BLOCK;
+    }
+    if(table_points > max_points_per_table){
+        return ERR_CURVE_OVER_POINTS;
+    }
+
+    unsigned int offset_ff = (table * (bytes_per_table)) + CURVE_TOTAL_RESERVED_BYTES;
+
+    load_ddr(offset_ff, table_points, curve1, curve2, curve3, curve4);
+   
+    return OK;
+}
+
+
+uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table){
+
+    if(table >= prudata[SHRAM_OFFSET_FF_N_TABLES]){
+        return ERR_CURVE_OVER_BLOCK;
+    }
+
+    unsigned int offset_ff = (table * (bytes_per_table)) + CURVE_TOTAL_RESERVED_BYTES;
+
+    read_ddr(offset_ff, max_points_per_table, curve1, curve2, curve3, curve4);
+    
+    return max_points_per_table;
 }

@@ -32,10 +32,14 @@ Date: May/2020
 #define ERR_LD_CURVE_MOPEN 2       // loadCurve
 #define ERR_LD_CURVE_MMAP 3        // loadCurve
 #define ERR_LD_CURVE_UMMAP 4       // loadCurve
+#define ERR_CURVE_OVER_BLOCK 11    // loadCurve + setCurveBlock
+#define ERR_CURVE_OVER_POINTS 12   // loadCurve + setCurvePointer
 #define ERR_INIT_PRU_SSDRV 5       // init_start_PRU
 #define ERR_INIT_PRU_MODE 6        // init_start_PRU
 #define ERR_INIT_PRU_BAUDR 7       // init_start_PRU
 #define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
+#define ERR_FF_TABLE_NUMBER 9      // ff_configure
+#define ERR_FF_IDTYPE 10           // ff_configure
 
 
 
@@ -51,6 +55,10 @@ extern "C" {
  * Util apenas no modo SLAVE
 */
 uint8_t hardware_address_serialPRU();
+
+
+
+int load_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4);
 
 
 
@@ -76,7 +84,9 @@ int clear_pulse_count_sync();
 */
 uint32_t read_pulse_count_sync();
 
+uint8_t read_shram(uint16_t offset);
 
+void write_shram(uint16_t offset, uint8_t value);
 
 /* PROCEDIMENTO SINCRONO - ESCOLHA DO PROXIMO PONTO A SER EXECUTADO
  *
@@ -206,6 +216,18 @@ uint8_t read_curve_block();
 */
 int init_start_PRU(int baudrate, char mode);
 
+
+
+
+int ff_configure(uint8_t idType, uint8_t nTables);
+
+void ff_enable();
+
+void ff_disable();
+
+int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table);
+
+uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table);
 
 
 /* ENVIO DE DADOS

@@ -635,6 +635,11 @@ DATA_READY:
     MOV         I, MENSAGEM_RECEBIDA_NOVA
     SBCO        I, SHRAM_BASE, 1, 1                             // Confirma Dados Recebidos prudata[1]=0x00
 
+
+    LBCO        I, SHRAM_BASE, 34, 1
+    QBNE        PROCEDURE_START_MASTER, I.b0, 0x02              // Se ajuste via FF, não levanta interrupção para o ARM
+
+
     MOV         r31.b0, PRU1_ARM_INTERRUPT+16
     MOV         r31.b0, PRU0_ARM_INTERRUPT+16
 
