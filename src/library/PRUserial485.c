@@ -75,7 +75,7 @@ Date: May/2020
 
 #define CURVE_MAX_BLOCKS                    4
 #define CURVE_BYTES_PER_BLOCK               100000
-#define CURVE_TOTAL_RESERVED_BYTES          CURVE_MAX_BLOCKS*CURVE_MAX_BLOCKS
+#define CURVE_TOTAL_RESERVED_BYTES          CURVE_MAX_BLOCKS*CURVE_BYTES_PER_BLOCK
 #define CURVE_MAX_POINTS_PER_BLOCK          CURVE_BYTES_PER_BLOCK/16
 
 #define MAP_SIZE                            0x0FFFFFFF
@@ -635,7 +635,6 @@ void *monitorRecvBuffer(void *arg){
             while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
             }
 
-            printf("new msg\r\n");
             // ----- Copia dos dados recebidos
             // Tamanho
             for(idx=0; idx<4; idx++){
@@ -652,7 +651,6 @@ void *monitorRecvBuffer(void *arg){
             }
             // ----- Sinaliza mensagem antiga
             prudata[1] = MENSAGEM_ANTIGA;
-            printf("fim\r\n");
         }
 
         else{
@@ -936,7 +934,6 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     prussdrv_pru_clear_event(PRU_EVTOUT_1, PRU1_ARM_INTERRUPT);
 
 
-    printf("recebido!\r\n");
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
     if(prudata[25] == 'M'){
         while(prudata[1] != MENSAGEM_ANTIGA); 
@@ -1053,8 +1050,9 @@ int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
 }
 
 void ff_enable(){
-    write_shram(SHRAM_OFFSET_FF_ENABLED, 1);
+    write_shram(SHRAM_OFFSET_FF_ENABLED, STS_FF_ENABLED);
 }
+
 
 void ff_disable(){
     write_shram(SHRAM_OFFSET_FF_ENABLED, 0);
@@ -1076,7 +1074,6 @@ int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, ui
    
     return OK;
 }
-
 
 uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table){
 
