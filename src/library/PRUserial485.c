@@ -59,12 +59,19 @@ Date: May/2020
 #define SHRAM_OFFSET_FF_ENABLED             14
 #define SHRAM_OFFSET_FF_N_TABLES            42
 #define SHRAM_OFFSET_FF_ID_TYPE             43
+#define SHRAM_OFFSET_FF_MAX_RANGE           44
+#define SHRAM_OFFSET_FF_POINTER             35
+#define SHRAM_OFFSET_FF_TABLE               37
 #define FF_TABLES_TOTAL_BYTES_RESERVED      600000
 #define FF_MIN_TABLES                       1
 #define FF_MAX_TABLES                       6
 #define FF_DELTA_ID_TYPE                    0
 #define FF_IVU_ID_TYPE                      1
 #define FF_VPU_ID_TYPE                      2
+#define FF_DELTA_MAX_RANGE                  52000.0 // [um]
+#define FF_IVU_MAX_RANGE                    22000.0 // [um]
+#define FF_VPU_MAX_RANGE                    20000.0 // [um]
+
 
 #define CURVE_MAX_BLOCKS                    4
 #define CURVE_BYTES_PER_BLOCK               100000
@@ -988,7 +995,7 @@ int recv_flush(){
 }
 
 
-int ff_configure(uint8_t id_type, uint8_t n_tables){
+int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
 
     if((id_type == FF_DELTA_ID_TYPE) | \
        (id_type == FF_IVU_ID_TYPE) |   \
@@ -1004,10 +1011,19 @@ int ff_configure(uint8_t id_type, uint8_t n_tables){
         return ERR_FF_TABLE_NUMBER;
     }
 
-    // Disable FeedForward PRU
+    // ----- Disable FeedForward PRU
     prussdrv_pru_disable(PRU_FF_NUM);
 
-    // ----- DDR address
+
+    // ----- ID Max Range
+    printf("%f\r\n", max_range);
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+0] = (uint32_t)(*(uint32_t*)&max_range) >> 0;    // LSByte [7..0]
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+1] = (uint32_t)(*(uint32_t*)&max_range) >> 8;    // Byte [15..8]
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+2] = (uint32_t)(*(uint32_t*)&max_range) >> 16;   // Byte [23..16]
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+3] = (uint32_t)(*(uint32_t*)&max_range) >> 24;   // MSByte [31..24]
+
+
+    // ----- DDR address - FeedForward operations
     unsigned int DDR_address[2], ff_init_table_addr;
 
     FILE* fp;
@@ -1015,8 +1031,6 @@ int ff_configure(uint8_t id_type, uint8_t n_tables){
     fscanf(fp, "%x", &DDR_address[0]);
     fclose(fp);
 
-
-    // Endereco da DDR - FeedForward operations
     ff_init_table_addr = DDR_address[0] + CURVE_TOTAL_RESERVED_BYTES;
     prudata[38] = (ff_init_table_addr) >> 0;    // LSByte [7..0]
     prudata[39] = (ff_init_table_addr) >> 8;    // Byte [15..8]
@@ -1024,13 +1038,14 @@ int ff_configure(uint8_t id_type, uint8_t n_tables){
     prudata[41] = (ff_init_table_addr) >> 24;   // MSByte [31..24]
 
 
-    // Split memory alocation into desired number of tables
+    // ----- Split memory alocation into desired number of tables
     prudata[SHRAM_OFFSET_FF_N_TABLES] = n_tables;
     bytes_per_table = FF_TABLES_TOTAL_BYTES_RESERVED / n_tables;
     max_points_per_table = bytes_per_table / 16;
+    printf("%d\r\n", max_points_per_table);
 
 
-    // ----- Executar codigo na PRU
+    // ----- Run code on PRU
     prussdrv_load_datafile(PRU_FF_NUM, PRU_FF_DATA);
     prussdrv_exec_program (PRU_FF_NUM, PRU_FF_BINARY);
 

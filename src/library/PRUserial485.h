@@ -219,7 +219,7 @@ int init_start_PRU(int baudrate, char mode);
 
 
 
-int ff_configure(uint8_t idType, uint8_t nTables);
+int ff_configure(uint8_t idType, uint8_t nTables, float max_range);
 
 void ff_enable();
 

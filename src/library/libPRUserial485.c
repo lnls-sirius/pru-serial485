@@ -310,17 +310,18 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
-// void PRUserial485_ff_configure(id_type, n_tables) -> int ff_configure(uint8_t id_type, uint8_t n_tables)
+// void PRUserial485_ff_configure(id_type, n_tables, max_range) -> int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range)
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_ff_configure(PyObject* self, PyObject *args)
 {
     uint8_t id_type, n_tables;
+    float max_range;
 
- 	if (!PyArg_ParseTuple(args, "ii", &id_type, &n_tables))
+ 	if (!PyArg_ParseTuple(args, "iif", &id_type, &n_tables, &max_range))
     {
  		return NULL;
  	}
-    int ret = ff_configure(id_type, n_tables);
+    int ret = ff_configure(id_type, n_tables, max_range);
     
     return Py_BuildValue("i", ret);
 }
