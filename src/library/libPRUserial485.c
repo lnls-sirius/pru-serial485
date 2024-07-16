@@ -348,6 +348,24 @@ PyObject* pru_ff_disable(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
+// int PRUserial485_ff_status() -> int ff_get_status()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_status(PyObject* self, PyObject *args)
+{
+    return Py_BuildValue("i", ff_get_status());
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_ff_get_table_size() -> int ff_get_table_size()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_get_table_size(PyObject* self, PyObject *args)
+{
+    return Py_BuildValue("i", ff_get_table_size());
+}
+
+
+// ------------------------------------------------------------------------------------------------
 // int PRUserial485_ff_load_table(int table, [[floats1],[floats2],[floats3],[floats4]]) ->
 // int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table)
 // ------------------------------------------------------------------------------------------------
@@ -386,7 +404,6 @@ PyObject* pru_ff_load_table(PyObject* self, PyObject *args)
 }
 
 
-
 // ------------------------------------------------------------------------------------------------
 // list(float) PRUserial485_ff_read_table(int table) ->
 // int ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table)
@@ -399,9 +416,11 @@ PyObject* pru_ff_read_table(PyObject* self, PyObject *args)
     PyObject* return_list = PyList_New(4);
 
     if (!PyArg_ParseTuple(args, "i", &table))
-    return NULL;
+        return NULL;
 
     table_points = ff_read_table(curves[0], curves[1], curves[2], curves[3], table);
+    if(table_points == ERR_CURVE_OVER_BLOCK)
+        return NULL;
 
     PyObject* curve = PyList_New(table_points);
 
@@ -417,12 +436,27 @@ PyObject* pru_ff_read_table(PyObject* self, PyObject *args)
 }
 
 
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_ff_read_current_table() -> int ff_read_current_table()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_read_current_table(PyObject* self, PyObject *args)
+{
+    return Py_BuildValue("i", ff_read_current_table());
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// int pru_ff_read_current_pointer() -> int ff_read_current_pointer()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_read_current_pointer(PyObject* self, PyObject *args)
+{
+    return Py_BuildValue("i", ff_read_current_pointer());
+}
 
 
 // ------------------------------------------------------------------------------------------------
 // Python Module definitions, methods and initialization
 // ------------------------------------------------------------------------------------------------
-
 static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_address",                (PyCFunction)pru_address,                 METH_VARARGS, NULL},
     {"PRUserial485_clear_pulse_count_sync", (PyCFunction)pru_clear_pulse_count_sync,  METH_VARARGS, NULL},
@@ -445,8 +479,12 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_ff_configure",	        (PyCFunction)pru_ff_configure,            METH_VARARGS, NULL},
     {"PRUserial485_ff_enable",	            (PyCFunction)pru_ff_enable,               METH_VARARGS, NULL},
     {"PRUserial485_ff_disable",	            (PyCFunction)pru_ff_disable,              METH_VARARGS, NULL},
+    {"PRUserial485_ff_status",	            (PyCFunction)pru_ff_status,               METH_VARARGS, NULL},
+    {"PRUserial485_ff_get_table_size",	    (PyCFunction)pru_ff_get_table_size,       METH_VARARGS, NULL},
     {"PRUserial485_ff_load_table",	        (PyCFunction)pru_ff_load_table,           METH_VARARGS, NULL},
     {"PRUserial485_ff_read_table",	        (PyCFunction)pru_ff_read_table,           METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_current_table",	(PyCFunction)pru_ff_read_current_table,   METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_current_pointer",(PyCFunction)pru_ff_read_current_pointer, METH_VARARGS, NULL},
     {"__version__",                         (PyCFunction)pru_version,                 METH_VARARGS, NULL},
     {NULL}
 };

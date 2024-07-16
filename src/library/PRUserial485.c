@@ -1055,7 +1055,24 @@ void ff_enable(){
 
 
 void ff_disable(){
-    write_shram(SHRAM_OFFSET_FF_ENABLED, 0);
+    write_shram(SHRAM_OFFSET_FF_ENABLED, STS_FF_DISABLED);
+}
+
+
+int ff_get_status(){
+
+    if (prudata[SHRAM_OFFSET_FF_ENABLED]){
+        return STS_FF_ENABLED;
+    }
+    else{
+        return STS_FF_DISABLED;
+    }
+}
+
+
+int ff_get_table_size(){
+
+    return max_points_per_table;
 }
 
 
@@ -1086,4 +1103,16 @@ uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve
     read_ddr(offset_ff, max_points_per_table, curve1, curve2, curve3, curve4);
     
     return max_points_per_table;
+}
+
+
+uint8_t ff_read_current_table(){
+   
+    return prudata[SHRAM_OFFSET_FF_TABLE];
+}
+
+
+uint16_t ff_read_current_pointer(){
+   
+    return ((prudata[SHRAM_OFFSET_FF_POINTER+1]<<8) + prudata[SHRAM_OFFSET_FF_POINTER]);
 }

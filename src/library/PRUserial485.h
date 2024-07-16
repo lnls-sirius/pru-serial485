@@ -40,6 +40,8 @@ Date: May/2020
 #define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
 #define ERR_FF_TABLE_NUMBER 9      // ff_configure
 #define ERR_FF_IDTYPE 10           // ff_configure
+#define STS_FF_ENABLED 1
+#define STS_FF_DISABLED 0
 
 
 
@@ -225,9 +227,18 @@ void ff_enable();
 
 void ff_disable();
 
+int ff_get_status();
+
+int ff_get_table_size();
+
 int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table);
 
 uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table);
+
+uint8_t ff_read_current_table();
+
+uint16_t ff_read_current_pointer();
+
 
 
 /* ENVIO DE DADOS
