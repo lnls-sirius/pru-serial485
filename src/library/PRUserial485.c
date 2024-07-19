@@ -11,7 +11,7 @@ Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
 Controls Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: May/2020
+Date: July/2024
 */
 
 #include "PRUserial485.h"
@@ -720,11 +720,9 @@ int init_start_PRU(int baudrate, char mode){
 
     // ----- Inicializacao da interrupcao PRU
     if (prussdrv_open(PRU_EVTOUT_1)){
-        // printf("prussdrv_open open failed\n");
         return ERR_INIT_PRU_SSDRV;
     }
     if (prussdrv_open(PRU_EVTOUT_0)){
-        // printf("prussdrv_open open failed\n");
         return ERR_INIT_PRU_SSDRV;
     }
     prussdrv_pruintc_init(&pruss_intc_initdata);
@@ -745,7 +743,6 @@ int init_start_PRU(int baudrate, char mode){
     else{
         // Modo nao existente
         close_PRU();
-        // printf("Requested mode does not exist.\n");
         return ERR_INIT_PRU_MODE;
     }
 
@@ -1014,7 +1011,6 @@ int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
 
 
     // ----- ID Max Range
-    printf("%f\r\n", max_range);
     prudata[SHRAM_OFFSET_FF_MAX_RANGE+0] = (uint32_t)(*(uint32_t*)&max_range) >> 0;    // LSByte [7..0]
     prudata[SHRAM_OFFSET_FF_MAX_RANGE+1] = (uint32_t)(*(uint32_t*)&max_range) >> 8;    // Byte [15..8]
     prudata[SHRAM_OFFSET_FF_MAX_RANGE+2] = (uint32_t)(*(uint32_t*)&max_range) >> 16;   // Byte [23..16]
@@ -1040,7 +1036,6 @@ int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
     prudata[SHRAM_OFFSET_FF_N_TABLES] = n_tables;
     bytes_per_table = FF_TABLES_TOTAL_BYTES_RESERVED / n_tables;
     max_points_per_table = bytes_per_table / 16;
-    printf("%d\r\n", max_points_per_table);
 
 
     // ----- Run code on PRU
@@ -1121,7 +1116,7 @@ uint16_t ff_read_current_pointer(){
 int ff_read_current_position(){
 
     uint16_t raw_pos;
-    raw_pos = (prudata[SHRAM_OFFSET_FF_POSITION+1]<<8) + prudata[SHRAM_OFFSET_FF_POSITION]
+    raw_pos = (prudata[SHRAM_OFFSET_FF_POSITION+1]<<8) + prudata[SHRAM_OFFSET_FF_POSITION];
 
-    return *(int*)(&raw_pos);
+    return *(int16_t*)(&raw_pos);
 }
