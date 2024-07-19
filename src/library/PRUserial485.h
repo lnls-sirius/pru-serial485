@@ -239,6 +239,8 @@ uint8_t ff_read_current_table();
 
 uint16_t ff_read_current_pointer();
 
+int ff_read_current_position();
+
 
 
 /* ENVIO DE DADOS

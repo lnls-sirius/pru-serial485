@@ -62,6 +62,7 @@ Date: May/2020
 #define SHRAM_OFFSET_FF_MAX_RANGE           44
 #define SHRAM_OFFSET_FF_POINTER             35
 #define SHRAM_OFFSET_FF_TABLE               37
+#define SHRAM_OFFSET_FF_POSITION            11001
 #define FF_TABLES_TOTAL_BYTES_RESERVED      600000
 #define FF_MIN_TABLES                       1
 #define FF_MAX_TABLES                       6
@@ -1115,4 +1116,12 @@ uint8_t ff_read_current_table(){
 uint16_t ff_read_current_pointer(){
    
     return ((prudata[SHRAM_OFFSET_FF_POINTER+1]<<8) + prudata[SHRAM_OFFSET_FF_POINTER]);
+}
+
+int ff_read_current_position(){
+
+    uint16_t raw_pos;
+    raw_pos = (prudata[SHRAM_OFFSET_FF_POSITION+1]<<8) + prudata[SHRAM_OFFSET_FF_POSITION]
+
+    return *(int*)(&raw_pos);
 }

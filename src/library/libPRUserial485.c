@@ -437,7 +437,7 @@ PyObject* pru_ff_read_table(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
-// int PRUserial485_ff_read_current_table() -> int ff_read_current_table()
+// int PRUserial485_ff_read_current_table() -> uint8_t ff_read_current_table()
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_ff_read_current_table(PyObject* self, PyObject *args)
 {
@@ -446,46 +446,57 @@ PyObject* pru_ff_read_current_table(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
-// int pru_ff_read_current_pointer() -> int ff_read_current_pointer()
+// int pru_ff_read_current_pointer() -> uint8_t ff_read_current_pointer()
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_ff_read_current_pointer(PyObject* self, PyObject *args)
 {
     return Py_BuildValue("i", ff_read_current_pointer());
 }
 
+// ------------------------------------------------------------------------------------------------
+// int pru_ff_read_current_position() -> int ff_read_current_position()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_read_current_position(PyObject* self, PyObject *args)
+{
+    return Py_BuildValue("i", ff_read_current_position());
+}
+
+
+
 
 // ------------------------------------------------------------------------------------------------
 // Python Module definitions, methods and initialization
 // ------------------------------------------------------------------------------------------------
 static PyMethodDef pruserial485_funcs[] = {
-    {"PRUserial485_address",                (PyCFunction)pru_address,                 METH_VARARGS, NULL},
-    {"PRUserial485_clear_pulse_count_sync", (PyCFunction)pru_clear_pulse_count_sync,  METH_VARARGS, NULL},
-    {"PRUserial485_read_pulse_count_sync",  (PyCFunction)pru_read_pulse_count_sync,   METH_VARARGS, NULL},
-    {"PRUserial485_set_curve_pointer",      (PyCFunction)pru_set_curve_pointer,       METH_VARARGS, NULL},
-    {"PRUserial485_read_curve_pointer",     (PyCFunction)pru_read_curve_pointer,      METH_VARARGS, NULL},
-    {"PRUserial485_sync_status",            (PyCFunction)pru_sync_status,             METH_VARARGS, NULL},
-    {"PRUserial485_sync_start",             (PyCFunction)pru_sync_start,              METH_VARARGS, NULL},
-    {"PRUserial485_sync_stop",              (PyCFunction)pru_sync_stop,               METH_VARARGS, NULL},
-    {"PRUserial485_close",                  (PyCFunction)pru_close,                   METH_VARARGS, NULL},
-    {"PRUserial485_curve",                  (PyCFunction)pru_load_curve_block,        METH_VARARGS, NULL},
-    {"PRUserial485_set_curve_block",        (PyCFunction)pru_set_curve_block,         METH_VARARGS, NULL},
-    {"PRUserial485_read_curve_block",       (PyCFunction)pru_read_curve_block,        METH_VARARGS, NULL},
-    {"PRUserial485_open",                   (PyCFunction)pru_open,                    METH_VARARGS, NULL},
-    {"PRUserial485_write",                  (PyCFunction)pru_send,                    METH_VARARGS, NULL},
-    {"PRUserial485_read",                   (PyCFunction)pru_recv,                    METH_VARARGS, NULL},
-    {"PRUserial485_read_flush",             (PyCFunction)pru_recv_flush,              METH_VARARGS, NULL},
-    {"PRUserial485_shram", 		            (PyCFunction)pru_read_shram,              METH_VARARGS, NULL},
-    {"PRUserial485_write_shram",	        (PyCFunction)pru_write_shram,             METH_VARARGS, NULL},
-    {"PRUserial485_ff_configure",	        (PyCFunction)pru_ff_configure,            METH_VARARGS, NULL},
-    {"PRUserial485_ff_enable",	            (PyCFunction)pru_ff_enable,               METH_VARARGS, NULL},
-    {"PRUserial485_ff_disable",	            (PyCFunction)pru_ff_disable,              METH_VARARGS, NULL},
-    {"PRUserial485_ff_status",	            (PyCFunction)pru_ff_status,               METH_VARARGS, NULL},
-    {"PRUserial485_ff_get_table_size",	    (PyCFunction)pru_ff_get_table_size,       METH_VARARGS, NULL},
-    {"PRUserial485_ff_load_table",	        (PyCFunction)pru_ff_load_table,           METH_VARARGS, NULL},
-    {"PRUserial485_ff_read_table",	        (PyCFunction)pru_ff_read_table,           METH_VARARGS, NULL},
-    {"PRUserial485_ff_read_current_table",	(PyCFunction)pru_ff_read_current_table,   METH_VARARGS, NULL},
-    {"PRUserial485_ff_read_current_pointer",(PyCFunction)pru_ff_read_current_pointer, METH_VARARGS, NULL},
-    {"__version__",                         (PyCFunction)pru_version,                 METH_VARARGS, NULL},
+    {"PRUserial485_address",                 (PyCFunction)pru_address,                  METH_VARARGS, NULL},
+    {"PRUserial485_clear_pulse_count_sync",  (PyCFunction)pru_clear_pulse_count_sync,   METH_VARARGS, NULL},
+    {"PRUserial485_read_pulse_count_sync",   (PyCFunction)pru_read_pulse_count_sync,    METH_VARARGS, NULL},
+    {"PRUserial485_set_curve_pointer",       (PyCFunction)pru_set_curve_pointer,        METH_VARARGS, NULL},
+    {"PRUserial485_read_curve_pointer",      (PyCFunction)pru_read_curve_pointer,       METH_VARARGS, NULL},
+    {"PRUserial485_sync_status",             (PyCFunction)pru_sync_status,              METH_VARARGS, NULL},
+    {"PRUserial485_sync_start",              (PyCFunction)pru_sync_start,               METH_VARARGS, NULL},
+    {"PRUserial485_sync_stop",               (PyCFunction)pru_sync_stop,                METH_VARARGS, NULL},
+    {"PRUserial485_close",                   (PyCFunction)pru_close,                    METH_VARARGS, NULL},
+    {"PRUserial485_curve",                   (PyCFunction)pru_load_curve_block,         METH_VARARGS, NULL},
+    {"PRUserial485_set_curve_block",         (PyCFunction)pru_set_curve_block,          METH_VARARGS, NULL},
+    {"PRUserial485_read_curve_block",        (PyCFunction)pru_read_curve_block,         METH_VARARGS, NULL},
+    {"PRUserial485_open",                    (PyCFunction)pru_open,                     METH_VARARGS, NULL},
+    {"PRUserial485_write",                   (PyCFunction)pru_send,                     METH_VARARGS, NULL},
+    {"PRUserial485_read",                    (PyCFunction)pru_recv,                     METH_VARARGS, NULL},
+    {"PRUserial485_read_flush",              (PyCFunction)pru_recv_flush,               METH_VARARGS, NULL},
+    {"PRUserial485_shram", 		             (PyCFunction)pru_read_shram,               METH_VARARGS, NULL},
+    {"PRUserial485_write_shram",	         (PyCFunction)pru_write_shram,              METH_VARARGS, NULL},
+    {"PRUserial485_ff_configure",	         (PyCFunction)pru_ff_configure,             METH_VARARGS, NULL},
+    {"PRUserial485_ff_enable",	             (PyCFunction)pru_ff_enable,                METH_VARARGS, NULL},
+    {"PRUserial485_ff_disable",	             (PyCFunction)pru_ff_disable,               METH_VARARGS, NULL},
+    {"PRUserial485_ff_status",	             (PyCFunction)pru_ff_status,                METH_VARARGS, NULL},
+    {"PRUserial485_ff_get_table_size",	     (PyCFunction)pru_ff_get_table_size,        METH_VARARGS, NULL},
+    {"PRUserial485_ff_load_table",	         (PyCFunction)pru_ff_load_table,            METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_table",	         (PyCFunction)pru_ff_read_table,            METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_current_table",	 (PyCFunction)pru_ff_read_current_table,    METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_current_pointer", (PyCFunction)pru_ff_read_current_pointer,  METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_current_position",(PyCFunction)pru_ff_read_current_position, METH_VARARGS, NULL},
+    {"__version__",                          (PyCFunction)pru_version,                  METH_VARARGS, NULL},
     {NULL}
 };
 
