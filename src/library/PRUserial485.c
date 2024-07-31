@@ -768,6 +768,13 @@ int init_start_PRU(int baudrate, char mode){
     // ----- Configuracao Baudrate
     uint32_t one_byte_length_ns = 0;
     switch (baudrate){
+        case 1:
+        prudata[2] = 0x20;    // BRGCONFIG
+        prudata[3] = 0x0f;    // DIVLSB
+        prudata[4] = 0x00;    // DIVMSB
+        one_byte_length_ns = (int) 10000/1;
+        break;
+
         case 6:
         prudata[2] = 0x28;    // BRGCONFIG
         prudata[3] = 0x02;    // DIVLSB

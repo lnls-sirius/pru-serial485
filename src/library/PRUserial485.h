@@ -204,6 +204,7 @@ uint8_t read_curve_block();
  * mode: modo de operacao. 'M' para master e 'S' para slave
  *
  * Velocidades disponiveis:
+ * (1)     Mbps
  * (6)     Mbps    |  (19200)  bps
  * (10)    Mbps    |  (38400)  bps
  * (12)    Mbps    |  (57600)  bps
