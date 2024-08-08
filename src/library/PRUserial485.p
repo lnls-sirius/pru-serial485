@@ -14,6 +14,13 @@
 #define OFFSET_SHRAM_SYNC_MODE          0x55                    // 85 - Sync Mode
 
 #define OFFSET_SEND_COMMAND             0x69
+#define OFFSET_SHRAM_MUTEX_PRU2_ARM         34
+#define OFFSET_SHRAM_MUTEX_PRU2_REQUEST     48
+#define OFFSET_SHRAM_MUTEX_ARM_REQUEST      49
+
+#define MUTEX_485_FREE                      0
+#define MUTEX_485_PRU2_ACQUIRED             1
+#define MUTEX_485_ARM_ACQUIRED              2
 
 
 
@@ -85,6 +92,10 @@
 #define SYNC_BROADCAST                  0x0B
 #define ENABLED_SYNC                    0xFF
 #define DISABLED_SYNC                   0x00
+
+
+
+
 
 
 
@@ -212,7 +223,7 @@ PROCEDURE_START_MASTER:
 OPERATION_MODE_MASTER:
     ZERO        &I, 4
     LBCO        I, SHRAM_BASE, 5, 1                             // 0xFF : Modo Sincrono
-    QBNE        WAIT_FOR_DATA, I, ENABLED_SYNC                  // 0x00 : Modo Normal
+    QBNE        CHECK_REQUEST, I, ENABLED_SYNC                  // 0x00 : Modo Normal
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -445,9 +456,33 @@ LOOP_DELAY:
 
 // ----- PROCEDIMENTO CONSTANTE -------------------------------------------------------------------
 // Verifica se os dados já estão prontos para serem enviados: SHRAM[1] = 0xFF
-WAIT_FOR_DATA:
+CHECK_REQUEST:
+    LBCO        I, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_REQUEST, 1
+    QBNE        PRU2_REQUESTED, I.b0, 0
+
+    LBCO        I, SHRAM_BASE, OFFSET_SHRAM_MUTEX_ARM_REQUEST, 1
+    QBNE        ARM_REQUESTED, I.b0, 0
+
+    JMP         OPERATION_MODE_MASTER
+
+
+PRU2_REQUESTED:
+    ZERO        &I, 4
+    ADD         I, I, MUTEX_485_PRU2_ACQUIRED
+    SBCO        I, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_ARM, 1
+    JMP         WAIT_DATA
+
+
+ARM_REQUESTED:
+    ZERO        &I, 4
+    ADD         I, I, MUTEX_485_ARM_ACQUIRED
+    SBCO        I, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_ARM, 1
+    JMP         WAIT_DATA
+
+
+WAIT_DATA:
     LBCO        I, SHRAM_BASE, 1, 1
-    QBNE        OPERATION_MODE_MASTER, I.b0, 0xff               // Se nao, volta a verificar condicao de sincronismo
+    QBNE        WAIT_DATA, I.b0, 0xff               // Se nao, volta a verificar condicao de sincronismo
 
 
 
@@ -635,11 +670,23 @@ DATA_READY:
     MOV         I, MENSAGEM_RECEBIDA_NOVA
     SBCO        I, SHRAM_BASE, 1, 1                             // Confirma Dados Recebidos prudata[1]=0x00
 
+    
+    LBCO        I, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_ARM, 1
+    QBEQ        END_ARM, I.b0, MUTEX_485_ARM_ACQUIRED  // Se ajuste via FF, não levanta interrupção para o ARM
 
-    LBCO        I, SHRAM_BASE, 34, 1
-    QBNE        PROCEDURE_START_MASTER, I.b0, 0x02              // Se ajuste via FF, não levanta interrupção para o ARM
+
+END_PRU2:
+    ZERO        &J,4
+    SBCO        J, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_REQUEST, 1
+    SBCO        J, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_ARM, 1
+
+    JMP         PROCEDURE_START_MASTER
 
 
+END_ARM:
+    ZERO        &J,4
+    SBCO        J, SHRAM_BASE, OFFSET_SHRAM_MUTEX_ARM_REQUEST, 1
+    SBCO        J, SHRAM_BASE, OFFSET_SHRAM_MUTEX_PRU2_ARM, 1
     MOV         r31.b0, PRU1_ARM_INTERRUPT+16
     MOV         r31.b0, PRU0_ARM_INTERRUPT+16
 

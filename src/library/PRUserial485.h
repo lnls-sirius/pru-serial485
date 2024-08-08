@@ -1,5 +1,5 @@
 /*
-PRUserial485.c
+PRUserial485.h
 
 
 --------------------------------------------------------------------------------
@@ -11,7 +11,7 @@ Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
 Controls Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: May/2020
+Date: July/2024
 */
 
 #include <stdio.h>
@@ -21,6 +21,9 @@ Date: May/2020
 #include <unistd.h>
 #include <prussdrv.h>
 #include <pruss_intc_mapping.h>
+
+
+
 
 
 /* Return codes */
@@ -45,6 +48,7 @@ Date: May/2020
 
 
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -55,12 +59,16 @@ extern "C" {
  * --Retorno--
  * Retorna o endereco fisico da placa, selecionado em hardware.
  * Util apenas no modo SLAVE
+ * 
 */
 uint8_t hardware_address_serialPRU();
 
 
 
 int load_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4);
+
+
+uint32_t read_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4);
 
 
 
@@ -72,6 +80,7 @@ int load_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, floa
  * --Retorno--
  *  OK              : apos zerar contador
  *  ERR_CLEAR_PULSE : Caso o modo sincrono esteja habilitado no modo master
+ * 
 */
 int clear_pulse_count_sync();
 
@@ -83,12 +92,34 @@ int clear_pulse_count_sync();
  * --Retorno--
  * Valor do contador de pulsos
  * (Contagem de pulsos físicos no modo MASTER --- Contagem de mensagem de passo sync no modo SLAVE)
+ * 
 */
 uint32_t read_pulse_count_sync();
 
+
+/* USO GERAL - LEITURA DE BYTE DA MEMORIA COMPARTILHADA (SHARED RAM)
+ *
+ * --Parametro--
+ * offset: index do byte a ser lido
+ * --Retorno--
+ * Valor do byte
+ * 
+*/
 uint8_t read_shram(uint16_t offset);
 
+
+
+/* USO GERAL - ESCRITA EM BYTE DA MEMORIA COMPARTILHADA (SHARED RAM)
+ *
+ *
+ * --Parametro--
+ * offset: index do byte a ser escrito
+ * value: valor a ser escrito
+ * 
+*/
 void write_shram(uint16_t offset, uint8_t value);
+
+
 
 /* PROCEDIMENTO SINCRONO - ESCOLHA DO PROXIMO PONTO A SER EXECUTADO
  *
@@ -96,6 +127,7 @@ void write_shram(uint16_t offset, uint8_t value);
  * --Parametro--
  * new_pointer: ponto de onde a curva sera executada a partir do proximo pulso de sincronismo. Parametro incrementado
  * automaticamente apos cada pulso.
+ * 
 */
 void set_curve_pointer(uint32_t new_pointer);
 
@@ -106,7 +138,7 @@ void set_curve_pointer(uint32_t new_pointer);
 * --Retorno--
  * MODO MASTER:
  * A funcao retorna o indice do proximo ponto que sera executado, apos o pulso de sincronismo.
- *
+ * 
 */
 uint32_t read_curve_pointer();
 
@@ -118,7 +150,7 @@ uint32_t read_curve_pointer();
  * MODO MASTER:
  * SYNC_ON : pronto
  * SYNC_OFF: desarmado
- *
+ * 
 */
 int sync_status();
 
@@ -136,6 +168,7 @@ int sync_status();
  * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
  * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5B
  * Sinaliza o inicio do procedimento sincrono via PRU
+ * 
 */
 void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address);
 
@@ -146,6 +179,7 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
  * SOMENTE MODO MASTER
  *
  * Sinaliza o encerramento do procedimento sincrono via PRU
+ * 
 */
 void set_sync_stop_PRU();
 
@@ -153,6 +187,7 @@ void set_sync_stop_PRU();
 
 /* DESABILITA PRU
  * Encerra atividade da PRU e fecha o mapeamento da memoria compartilhada
+ *
 */
 void close_PRU();
 
@@ -259,6 +294,7 @@ int ff_read_current_position();
  *
  * MODO SLAVE:
  * A funcao retorna OK apos o envio dos dados
+ * 
 */
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
 
@@ -285,6 +321,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
  * OK                   : apos a copia dos novos dados recebidos nos enderecos
  *                        indicados pelos parametros da funcao.
  * ERR_RECV_DATA_OLDMSG : caso nao exista novos dados de recepcao no buffer
+ * 
 */
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
 

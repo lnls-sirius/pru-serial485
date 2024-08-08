@@ -15,6 +15,7 @@ Date: July/2024
 */
 
 #include "PRUserial485.h"
+#include "shram_mapping.h"
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <pthread.h>
@@ -22,47 +23,56 @@ Date: July/2024
 
 
 
-#define PRU_NUM             1
-#define PRU_FF_NUM          0
-#define PRU_BINARY          "/usr/bin/PRUserial485.bin"
-#define PRU_FF_BINARY          "/usr/bin/firmware.bin"
-#define PRU_FF_DATA            "/usr/bin/data.bin"
-#define OFFSET_SHRAM_WRITE  0x64    // 100 general purpose bytes
-#define OFFSET_SHRAM_READ   0x1800  //
-#define OFFSET_SHRAM_FF_MUTEX_485 34
+
+// --- PRU mapping
+#define PRU_485_NUM                         1 // Primary PRU
+#define PRU_485_BINARY                      "/usr/bin/PRUserial485.bin"
+#define PRU_FF_NUM                          0 // Secondary PRU
+#define PRU_FF_BINARY                       "/usr/bin/firmware.bin"
+#define PRU_FF_DATA                         "/usr/bin/data.bin"
 
 
-#define FF_MUTEX_485_FREE           0
-#define FF_MUTEX_485_FF_ACQUIRED    1
-#define FF_MUTEX_485_ARM_ACQUIRED   2
+// --- ARM Registers
+#define GPIO_DATAOUT                        0x13C
+#define GPIO_DATAIN                         0x138
+#define GPIO0_ADDR                          0x44E07000
+#define GPIO1_ADDR                          0x4804C000
+#define GPIO2_ADDR                          0x481AC000
+#define GPIO3_ADDR                          0x481AF000
+#define CM_PER_ADDR                         0x44E00000
+#define CM_GPIO1                            0xAC
+#define CM_GPIO2                            0xB0
+#define CM_GPIO3                            0xB4
 
 
-#define MENSAGEM_ANTIGA         0x55
-#define MENSAGEM_RECEBIDA_NOVA  0x00
-#define MENSAGEM_PARA_ENVIAR    0xff
-
-#define GPIO_DATAOUT 0x13C
-#define GPIO_DATAIN  0x138
-#define GPIO0_ADDR   0x44E07000
-#define GPIO1_ADDR   0x4804C000
-#define GPIO2_ADDR   0x481AC000
-#define GPIO3_ADDR   0x481AF000
-#define CM_PER_ADDR  0x44E00000
-#define CM_GPIO1     0xAC
-#define CM_GPIO2     0xB0
-#define CM_GPIO3     0xB4
-
-#define MMAP0_LOC   "/sys/class/uio/uio0/maps/map0/"
-#define MMAP1_LOC   "/sys/class/uio/uio0/maps/map1/"
+// --- Memory mapping
+#define MMAP0_LOC                           "/sys/class/uio/uio0/maps/map0/"
+#define MMAP1_LOC                           "/sys/class/uio/uio0/maps/map1/"
+#define MAP_SIZE                            0x0FFFFFFF
+#define MAP_MASK                            (MAP_SIZE)
 
 
-#define SHRAM_OFFSET_FF_ENABLED             14
-#define SHRAM_OFFSET_FF_N_TABLES            42
-#define SHRAM_OFFSET_FF_ID_TYPE             43
-#define SHRAM_OFFSET_FF_MAX_RANGE           44
-#define SHRAM_OFFSET_FF_POINTER             35
-#define SHRAM_OFFSET_FF_TABLE               37
-#define SHRAM_OFFSET_FF_POSITION            11001
+// --- Parameters for RS485 flow control
+#define INCOMING_BUFF_SIZE                  100000
+#define OLD_DATA                            0x55
+#define NEW_INCOMING_DATA                   0x00
+#define NEW_SENDING_DATA                    0xff
+
+
+// --- Mutex for RS485 (PRU1) sharing
+#define MUTEX_485_FREE                      0
+#define MUTEX_485_PRU2_ACQUIRED             1
+#define MUTEX_485_ARM_ACQUIRED              2
+
+
+// --- Curves for Sync Mode
+#define CURVE_MAX_BLOCKS                    4
+#define CURVE_BYTES_PER_BLOCK               100000
+#define CURVE_TOTAL_RESERVED_BYTES          CURVE_MAX_BLOCKS*CURVE_BYTES_PER_BLOCK
+#define CURVE_MAX_POINTS_PER_BLOCK          CURVE_BYTES_PER_BLOCK/16
+
+
+// --- FeedForward variables - PRU2
 #define FF_TABLES_TOTAL_BYTES_RESERVED      600000
 #define FF_MIN_TABLES                       1
 #define FF_MAX_TABLES                       6
@@ -74,78 +84,24 @@ Date: July/2024
 #define FF_VPU_MAX_RANGE                    20000.0 // [um]
 
 
-#define CURVE_MAX_BLOCKS                    4
-#define CURVE_BYTES_PER_BLOCK               100000
-#define CURVE_TOTAL_RESERVED_BYTES          CURVE_MAX_BLOCKS*CURVE_BYTES_PER_BLOCK
-#define CURVE_MAX_POINTS_PER_BLOCK          CURVE_BYTES_PER_BLOCK/16
 
-#define MAP_SIZE                            0x0FFFFFFF
-#define MAP_MASK                            (MAP_SIZE)
-
-
-
-/* PRU SHARED MEMORY (12kB) - MAPPING
-*
-*
-* SHRAM[0]~SHRAM[49] - General Purpose
-*
-* prudata[0] = versao MAX3107 (0x1a)
-* prudata[1] = Status: dados para enviar (0xFF) / dados para ler (0x00) / dados antigos (0x55)
-* prudata[2] = Baudrate (BRGCONFIG)
-* prudata[3] = Baudrate (DIVLSB)
-* prudata[4] = Baudrate (DIVMSB)
-* prudata[5] = procedimento sincrono: START (0xFF) ou STOP (0x00)
-* prudata[6..9] = Timeout
-*
-* prudata[10..13] = Ponteiro para próximo ponto da curva a ser executado
-* prudata[15..18] = Endereco absoluto do bloco alocado na memoria DDR (armazenamento de curvas)
-* prudata[20..23] = Tamanho total em bytes das quatro curvas
-*
-* prudata[24] = Board hardware address
-* prudata[25] = Master/Slave ('M'/'S')
-* prudata[26..28] = 1 Serial Byte length (ns)
-* prudata[29..31] = Delay Sync-Normal command (x10ns)
-*
-* prudata[32] = MAX3107 RXTIMEOUT
-*
-* SHRAM[50]~SHRAM[99] - Sync Operation
-* prudata[50] = data size
-* prudata[51..] = data
-* prudata[80..83] = Pulse counting
-* prudata[84] = Sync_Ok (0x00 not ok / 0xFF waiting for trigger)
-* prudata[85] = Sync_Mode
-| 0x51 - Single curve sequence & Intercalated read messages
-*        | 0x5E - Single curve sequence & Read messages at End of curve
-*        | 0xC1 - Continuous curve sequence & Intercalated read messages
-*        | 0xCE - Continuous curve sequence & Read messages at End of curve
-*        | 0x5B - Single Sequence - Single Broadcast Function command
-*
-*
-* SHRAM[100] ~ SHRAM[6k-1] - Sending Data
-*
-* prudata[100..103] = Tamanho do vetor de dados
-* prudata[104..] = vetor de dados
-*
-*
-*
-* SHRAM[6k] ~ SHRAM[12k-1] - Receiving Data
-*
-* prudata[6k..6k+3] = Tamanho do vetor de dados
-* prudata[6k+4..] = vetor de dados
-*/
-
-
-#define BUFF_SIZE 100000
-
+// --- Shared RAM pointer
 volatile uint8_t* prudata;
-volatile uint8_t receive_buffer[BUFF_SIZE];
-volatile uint32_t pru_pointer = 0, read_pointer = 0;
+
+
+// --- Managing/threading RS485 incoming data in circular buffer
+pthread_mutex_t lock;
 volatile pthread_t tid = 0;
 volatile uint8_t thread_control = 0;
+volatile uint32_t pru_pointer = 0, read_pointer = 0;
+volatile uint8_t receive_buffer[INCOMING_BUFF_SIZE];
+
+
+// --- FeedForward config variables
 volatile int bytes_per_table = 0, max_points_per_table = 0;
 
-pthread_mutex_t lock;
 
+// --- General Purpose
 size_t i;
 
 
@@ -401,13 +357,11 @@ uint32_t read_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1,
 }
 
 
-
 int clear_pulse_count_sync(){
-    if(prudata[5]==0x00){     // Sync disabled. Clear pulse counting
-        prudata[80] = 0;
-        prudata[81] = 0;
-        prudata[82] = 0;
-        prudata[83] = 0;
+    if(prudata[SHRAM_OFFSET_SYNC_STATUS]==0x00){     // Sync disabled. Clear pulse counting
+        for(i=0; i<3; i++){
+            prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+i] = 0;
+        }
         return OK;
     }
     else{
@@ -418,7 +372,10 @@ int clear_pulse_count_sync(){
 
 uint32_t read_pulse_count_sync(){
     uint32_t counting = 0;
-    counting = (prudata[83] << 24) + (prudata[82] << 16) + (prudata[81] << 8) + prudata[80];
+    counting =  (prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+3] << 24) + \
+                (prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+2] << 16) + \
+                (prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+1] << 8)  + \
+                 prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING];
     return counting;
 }
 
@@ -434,43 +391,49 @@ void write_shram(uint16_t offset, uint8_t value){
 
 
 void set_curve_pointer(uint32_t new_pointer){
-    if(16*new_pointer >= ((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20])){
+    if(16*new_pointer >= ((prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+3]<<24) + \
+                          (prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+2]<<16) + \
+                          (prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+1]<<8)  + \
+                           prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES])){
         return;
     }
-    prudata[10] = (16*new_pointer);        // LSByte do new_pointer [7..0]
-    prudata[11] = (16*new_pointer) >> 8;   // Byte do new_pointer [15..8]
-    prudata[12] = (16*new_pointer) >> 16;  // Byte do new_pointer [23..16]
-    prudata[13] = (16*new_pointer) >> 24;  // MSByte do new_pointer [31..24]
 
-    while (((prudata[13]<<24) + (prudata[12]<<16) + (prudata[11]<<8) + prudata[10]) != 16*new_pointer){
+    for(i=0; i<3; i++){
+        prudata[SHRAM_OFFSET_SYNC_POINTER+i] = (16*new_pointer) >> i*8;
+    }
+
+    while (((prudata[SHRAM_OFFSET_SYNC_POINTER+3]<<24) + \
+            (prudata[SHRAM_OFFSET_SYNC_POINTER+2]<<16) + \
+            (prudata[SHRAM_OFFSET_SYNC_POINTER+1]<<8)  + \
+             prudata[SHRAM_OFFSET_SYNC_POINTER]) != 16*new_pointer){
     }
 }
-
 
 
 uint32_t read_curve_pointer(){
     uint32_t pointer = 0;
-    pointer = ((prudata[13] << 24) + (prudata[12] << 16) + (prudata[11] << 8) + prudata[10])/16;
+    pointer = ((prudata[SHRAM_OFFSET_SYNC_POINTER+3] << 24) + \
+               (prudata[SHRAM_OFFSET_SYNC_POINTER+2] << 16) + \
+               (prudata[SHRAM_OFFSET_SYNC_POINTER+1] << 8)  + \
+                prudata[SHRAM_OFFSET_SYNC_POINTER])/16;
     return pointer;
 }
 
 
-
 int sync_status(){
     // Sync trigger not waiting
-    if(prudata[84] == 0x00){
+    if(prudata[SHRAM_OFFSET_SYNC_TRIGGER_WAITING] == 0x00){
         return SYNC_OFF;
     }
     // Sync trigger waiting
-    if(prudata[84] == 0xff){
+    if(prudata[SHRAM_OFFSET_SYNC_TRIGGER_WAITING] == 0xff){
         return SYNC_ON;
     }
 }
 
 
-
 void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address){
-    if(prudata[25]=='M'){
+    if(prudata[SHRAM_OFFSET_485_MODE]=='M'){
         clear_pulse_count_sync();
         set_curve_pointer(0);
 
@@ -478,28 +441,28 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
 
         // ----- Instrucao - Sync - Broadcast function
         if(sync_mode == 0x5B){
-            prudata[50] = 0x06;       // Tamanho
-            prudata[51] = 0xff;       // | Endereco broadcast
-            prudata[52] = 0x50;       // |
-            prudata[53] = 0x00;       // | Comando a ser enviado
-            prudata[54] = 0x01;       // | apos pulso de sync
-            prudata[55] = 0x0f;       // |
-            prudata[56] = 0xa1;       // |
+            prudata[SHRAM_OFFSET_SYNC_DATA_SIZE] = 0x06;       // Tamanho
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD]   = 0xff;       // | Endereco broadcast
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+1] = 0x50;       // |
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+2] = 0x00;       // | Comando a ser enviado
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+3] = 0x01;       // | apos pulso de sync
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+4] = 0x0f;       // |
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+5] = 0xa1;       // |
         }
         // ----- Instrucao - Sync - SetIx4
         else {
-            prudata[50] = 0x16;          // Tamanho
-            prudata[51] = sync_address;  // | Endereco do controlador que respondera ao sync
-            prudata[52] = 0x50;          // |
-            prudata[53] = 0x00;          // | Comando a ser enviado
-            prudata[54] = 0x11;          // | apos pulso de sync
-            prudata[55] = 0x11;          // |
+            prudata[SHRAM_OFFSET_SYNC_DATA_SIZE] = 0x16;          // Tamanho
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD]   = sync_address;  // | Endereco do controlador que respondera ao sync
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+1] = 0x50;          // |
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+2] = 0x00;          // | Comando a ser enviado
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+3] = 0x11;          // | apos pulso de sync
+            prudata[SHRAM_OFFSET_SYNC_PAYLOAD+4] = 0x11;          // |
         }
 
         // Delay entre comando de sincronismo e requisicao qualquer
         // ----- Calculo do delay
         for(i=0; i<3; i++){
-            delay_ns += prudata[26+i] << i*8;
+            delay_ns += prudata[SHRAM_OFFSET_485_BYTE_LENGTH_NS+i] << i*8;
         }
 
         // ---- Numero de loops = delay / 10 ns. Se delay = 0, apenas 1 loop.
@@ -509,7 +472,7 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
         }
         // ----- Armazena numero de instrucoes
         for(i=0; i<3; i++){
-            prudata[29+i] = delay_ns >> i*8;
+            prudata[SHRAM_OFFSET_SYNC_DELAY+i] = delay_ns >> i*8;
         }
 
         // Modo de Sincronismo
@@ -517,10 +480,10 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
         // 0x5E - Single curve sequence & Read messages at End of curve
         // 0xC1 - Continuous curve sequence & Intercalated read messages
         // 0xCE - Continuous curve sequence & Read messages at End of curve
-        prudata[85] = sync_mode;
+        prudata[SHRAM_OFFSET_SYNC_MODE] = sync_mode;
 
         // Inicio modo sincrono
-        prudata[5] = 0xff;
+        prudata[SHRAM_OFFSET_SYNC_STATUS] = 0xff;
 
         // Aguarda início efetivo
         while(sync_status() == 0){
@@ -529,21 +492,19 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
 }
 
 
-
 void set_sync_stop_PRU(){
-    if(prudata[25]=='M'){
-        prudata[5] = 0x00;
-        prussdrv_exec_program(PRU_NUM, PRU_BINARY);
+    if(prudata[SHRAM_OFFSET_485_MODE]=='M'){
+        prudata[SHRAM_OFFSET_SYNC_STATUS] = 0x00;
+        prussdrv_exec_program(PRU_485_NUM, PRU_485_BINARY);
     }
 }
-
 
 
 void close_PRU(){
     // ----- Desabilita PRU e fecha mapeamento da shared RAM
     thread_control = 0;
     tid = 0;
-    prussdrv_pru_disable(PRU_NUM);
+    prussdrv_pru_disable(PRU_485_NUM);
     prussdrv_exit();
 }
 
@@ -560,14 +521,20 @@ int loadCurve(float *curve1, float *curve2, float *curve3, float *curve4, uint32
     load_ddr(block*CURVE_BYTES_PER_BLOCK, CurvePoints, curve1, curve2, curve3, curve4);
 
     
-    if (((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
-        // Tamanho em bytes
-        prudata[20] = (16*CurvePoints);         // LSByte do tamanho curva [7..0]
-        prudata[21] = (16*CurvePoints) >> 8;    // Byte do tamanho curva [15..8]
-        prudata[22] = (16*CurvePoints) >> 16;   // Byte do tamanho curva [23..16]
-        prudata[23] = (16*CurvePoints) >> 24;   // MSByte do tamanho curva [31..24]
+    if(((prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+3]<<24) + \
+        (prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+2]<<16) + \
+        (prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+1]<<8)  + \
+         prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES]) != (16*CurvePoints)){
 
-        while(((prudata[23]<<24) + (prudata[22]<<16) + (prudata[21]<<8) + prudata[20]) != (16*CurvePoints)){
+        // Tamanho em bytes
+        for(i=0; i<3; i++){
+            prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+i] = (16*CurvePoints) >> i*8;
+        }
+        
+        while(((prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+3]<<24) + \
+               (prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+2]<<16) + \
+               (prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES+1]<<8)  + \
+                prudata[SHRAM_OFFSET_SYNC_TOTAL_CURVE_BYTES]) != (16*CurvePoints)){
         }
     }
 
@@ -591,10 +558,10 @@ void set_curve_block(uint8_t block){
     DDR_address[0] += block * (CURVE_BYTES_PER_BLOCK);
 
     // Endereco do bloco na DDR
-    prudata[15] = (DDR_address[0]) >> 0;    // LSByte [7..0]
-    prudata[16] = (DDR_address[0]) >> 8;    // Byte [15..8]
-    prudata[17] = (DDR_address[0]) >> 16;   // Byte [23..16]
-    prudata[18] = (DDR_address[0]) >> 24;   // MSByte [31..24]
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR]   = (DDR_address[0]) >> 0;
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+1] = (DDR_address[0]) >> 8;
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+2] = (DDR_address[0]) >> 16;
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+3] = (DDR_address[0]) >> 24;
 
 }
 
@@ -609,7 +576,10 @@ uint8_t read_curve_block(){
     fclose(fp);
 
     // Endereco do bloco na DDR
-    address = (prudata[18] << 24) + (prudata[17] << 16) +(prudata[16] << 8) +(prudata[15] << 0);
+    address = (prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+3] << 24) + \
+              (prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+2] << 16) + \
+              (prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+1] << 8)  + \
+               prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR];
     block = (address - DDR_address[0])/CURVE_BYTES_PER_BLOCK;
 
     return block;
@@ -618,8 +588,8 @@ uint8_t read_curve_block(){
 
 void *monitorRecvBuffer(void *arg){
     // ----- Copia dos dados recebidos
-    uint32_t pru_recv_pointer = OFFSET_SHRAM_READ + 3;
-    uint32_t os_recv_pointer = OFFSET_SHRAM_READ + 3;
+    uint32_t pru_recv_pointer = SHRAM_OFFSET_READ + 3;
+    uint32_t os_recv_pointer = SHRAM_OFFSET_READ + 3;
     uint32_t tamanho;
     uint32_t BUFF_RECV_START = 0x1803;
     uint32_t BUFF_RECV_STOP = 0x2800;
@@ -629,29 +599,29 @@ void *monitorRecvBuffer(void *arg){
         // ----- Aguarda sinal de finalizacao do ciclo
         tamanho = 0;
 
-        if(prudata[25] == 'M'){
+        if(prudata[SHRAM_OFFSET_485_MODE] == 'M'){
             prussdrv_pru_wait_event(PRU_EVTOUT_0);
             prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
             // ----- Nova mensagem recebida !
-            while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
+            while(prudata[SHRAM_OFFSET_DATA_STATUS] != NEW_INCOMING_DATA){
             }
 
             // ----- Copia dos dados recebidos
             // Tamanho
             for(idx=0; idx<4; idx++){
-                tamanho += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
+                tamanho += prudata[SHRAM_OFFSET_READ+idx] << idx*8;
             }
             // Dados
             for(idx=0; idx<tamanho; idx++){
-                receive_buffer[pru_pointer] = prudata[OFFSET_SHRAM_READ+4+idx];
+                receive_buffer[pru_pointer] = prudata[SHRAM_OFFSET_READ+4+idx];
                 pru_pointer++;
                 // Reset pru_pointer
-                if(pru_pointer == BUFF_SIZE){
+                if(pru_pointer == INCOMING_BUFF_SIZE){
                     pru_pointer = 0;
                 }
             }
             // ----- Sinaliza mensagem antiga
-            prudata[1] = MENSAGEM_ANTIGA;
+            prudata[SHRAM_OFFSET_DATA_STATUS] = OLD_DATA;
         }
 
         else{
@@ -660,22 +630,22 @@ void *monitorRecvBuffer(void *arg){
 
             // ----- Nova mensagem recebida !
             // Aguarda dado salvo na SHRAM
-            while(prudata[1] != MENSAGEM_RECEBIDA_NOVA){
+            while(prudata[SHRAM_OFFSET_DATA_STATUS] != NEW_INCOMING_DATA){
             }
             // ----- Sinaliza mensagem antiga
-            prudata[1] = MENSAGEM_ANTIGA;
+            prudata[SHRAM_OFFSET_DATA_STATUS] = OLD_DATA;
 
             // Le ponteiro da PRU
             pru_recv_pointer = 0;
             for(idx=0; idx<4; idx++){
-                pru_recv_pointer += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
+                pru_recv_pointer += prudata[SHRAM_OFFSET_READ+idx] << idx*8;
             }
 
             while(pru_recv_pointer == os_recv_pointer){
                 // Atualiza pru_recv_pointer
                 pru_recv_pointer = 0;
                 for(idx=0; idx<4; idx++){
-                    pru_recv_pointer += prudata[OFFSET_SHRAM_READ+idx] << idx*8;
+                    pru_recv_pointer += prudata[SHRAM_OFFSET_READ+idx] << idx*8;
                 }
             }
 
@@ -696,7 +666,7 @@ void *monitorRecvBuffer(void *arg){
                 receive_buffer[pru_pointer] = prudata[os_recv_pointer];
                 pru_pointer++;
                 // Reset pru_pointer
-                if(pru_pointer == BUFF_SIZE){
+                if(pru_pointer == INCOMING_BUFF_SIZE){
                     pru_pointer = 0;
                 }
                 // Reset recv pointer
@@ -739,7 +709,7 @@ int init_start_PRU(int baudrate, char mode){
 
     // ----- MODO DE OPERACAO: Master/Slave
     if(mode=='M' || mode=='S')
-    prudata[25] = mode;
+    prudata[SHRAM_OFFSET_485_MODE] = mode;
     else{
         // Modo nao existente
         close_PRU();
@@ -747,19 +717,21 @@ int init_start_PRU(int baudrate, char mode){
     }
 
     // ----- Inicializacao: contador de sincronismo zerado
-    prudata[80] = 0;
-    prudata[81] = 0;
+    prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING]   = 0;
+    prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+1] = 0;
+    prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+2] = 0;
+    prudata[SHRAM_OFFSET_SYNC_PULSE_COUNTING+3] = 0;
 
     // ----- Inicializacao MASTER: procedimento sincrono desabilitado e RxTimeOut = 2 bytes
-    if(prudata[25]=='M'){
+    if(prudata[SHRAM_OFFSET_485_MODE]=='M'){
         set_sync_stop_PRU();
-        prudata[32] = 0x02;
+        prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x02;
     }
 
     // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
-    if(prudata[25]=='S'){
-        prudata[1]=MENSAGEM_ANTIGA;
-        prudata[32] = 0x02;
+    if(prudata[SHRAM_OFFSET_485_MODE]=='S'){
+        prudata[SHRAM_OFFSET_DATA_STATUS]=OLD_DATA;
+        prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x02;
     }
 
     // Endereco de Hardware
@@ -769,72 +741,72 @@ int init_start_PRU(int baudrate, char mode){
     uint32_t one_byte_length_ns = 0;
     switch (baudrate){
         case 1:
-        prudata[2] = 0x20;    // BRGCONFIG
-        prudata[3] = 0x0f;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x20;
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x0f;
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 10000/1;
         break;
 
         case 6:
-        prudata[2] = 0x28;    // BRGCONFIG
-        prudata[3] = 0x02;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x28; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x02; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 10000/6;
         break;
 
         case 10:
-        prudata[2] = 0x28;    // BRGCONFIG
-        prudata[3] = 0x01;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x28; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x01; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 10000/10;
         break;
 
         case 12:
-        prudata[2] = 0x24;    // BRGCONFIG
-        prudata[3] = 0x01;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x24; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x01; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 10000/12;
         break;
 
         case 9600:
-        prudata[2] = 0x0a;      // BRGCONFIG
-        prudata[3] = 0x86;      // DIVLSB
-        prudata[4] = 0x01;      // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x0a;   
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x86;   
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x01;   
         one_byte_length_ns = (int) 100000000/96;
         break;
 
         case 14400:
-        prudata[2] = 0x07;    // BRGCONFIG
-        prudata[3] = 0x04;    // DIVLSB
-        prudata[4] = 0x01;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x07; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x04; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x01; 
         one_byte_length_ns = (int) 100000000/144;
         break;
 
         case 19200:
-        prudata[2] = 0x05;    // BRGCONFIG
-        prudata[3] = 0xc3;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x05; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0xc3; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 100000000/192;
         break;
 
         case 38400:
-        prudata[2] = 0x15;    // BRGCONFIG
-        prudata[3] = 0xc3;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x15; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0xc3; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 100000000/384;
         break;
 
         case 57600:
-        prudata[2] = 0x27;    // BRGCONFIG
-        prudata[3] = 0x04;    // DIVLSB
-        prudata[4] = 0x01;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x27; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x04; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x01; 
         one_byte_length_ns = (int) 100000000/576;
         break;
 
         case 115200:
-        prudata[2] = 0x09;    // BRGCONFIG
-        prudata[3] = 0x20;    // DIVLSB
-        prudata[4] = 0x00;    // DIVMSB
+        prudata[SHRAM_OFFSET_MAX3107_BRGCONFIG] = 0x09; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVLSB]    = 0x20; 
+        prudata[SHRAM_OFFSET_MAX3107_DIVMSB]    = 0x00; 
         one_byte_length_ns = (int) 100000000/1152;
         break;
 
@@ -843,9 +815,10 @@ int init_start_PRU(int baudrate, char mode){
         return ERR_INIT_PRU_BAUDR;
     }
 
-    prudata[26] = one_byte_length_ns;
-    prudata[27] = one_byte_length_ns >> 8;
-    prudata[28] = one_byte_length_ns >>16;
+    prudata[SHRAM_OFFSET_485_BYTE_LENGTH_NS] = one_byte_length_ns;
+    prudata[SHRAM_OFFSET_485_BYTE_LENGTH_NS+1] = one_byte_length_ns >> 8;
+    prudata[SHRAM_OFFSET_485_BYTE_LENGTH_NS+2] = one_byte_length_ns >>16;
+    prudata[SHRAM_OFFSET_485_BYTE_LENGTH_NS+3] = one_byte_length_ns >>24;
 
     // ----- DDR address
     unsigned int DDR_address[2];
@@ -860,20 +833,20 @@ int init_start_PRU(int baudrate, char mode){
     fclose(fp);
 
     // Endereco da DDR - Sync via PRUserial485
-    prudata[15] = (DDR_address[0]) >> 0;    // LSByte [7..0]
-    prudata[16] = (DDR_address[0]) >> 8;    // Byte [15..8]
-    prudata[17] = (DDR_address[0]) >> 16;   // Byte [23..16]
-    prudata[18] = (DDR_address[0]) >> 24;   // MSByte [31..24]
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR]   = (DDR_address[0]) >> 0;
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+1] = (DDR_address[0]) >> 8;
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+2] = (DDR_address[0]) >> 16;
+    prudata[SHRAM_OFFSET_SYNC_BLOCK_ABS_ADDR+3] = (DDR_address[0]) >> 24;
 
     // Endereco da DDR - FeedForward operations
-    prudata[38] = (DDR_address[0]) >> 0;    // LSByte [7..0]
-    prudata[39] = (DDR_address[0]) >> 8;    // Byte [15..8]
-    prudata[40] = (DDR_address[0]) >> 16;   // Byte [23..16]
-    prudata[41] = (DDR_address[0]) >> 24;   // MSByte [31..24]
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR]   = (DDR_address[0]) >> 0;
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+1] = (DDR_address[0]) >> 8;
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+2] = (DDR_address[0]) >> 16;
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+3] = (DDR_address[0]) >> 24;
 
 
     // ----- Executar codigo na PRU
-    prussdrv_exec_program (PRU_NUM, PRU_BINARY);
+    prussdrv_exec_program (PRU_485_NUM, PRU_485_BINARY);
 
     // ----- Lanca thread para monitorar recebimento de dados
     //        e reinicializa ponteiros
@@ -905,34 +878,35 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
     timeout_inst = timeout_ms*66600;
     timeout_instructions = (int)timeout_inst;
 
-    while(prudata[OFFSET_SHRAM_FF_MUTEX_485] != FF_MUTEX_485_FREE){
-    }
-    prudata[OFFSET_SHRAM_FF_MUTEX_485] = FF_MUTEX_485_ARM_ACQUIRED;
 
+    prudata[SHRAM_OFFSET_MUTEX_ARM_REQUEST] = 1;
+    while(prudata[SHRAM_OFFSET_MUTEX_PRU2_ARM] != MUTEX_485_ARM_ACQUIRED){
+    }
+    
 
 
     // ----- MASTER: Configuracao do Timeout
-    if(prudata[25]=='M'){
-        prudata[6] = timeout_instructions;        // LSByte do timeout_instructions [7..0]
-        prudata[7] = timeout_instructions >> 8;   // Byte do timeout_instructions [15..8]
-        prudata[8] = timeout_instructions >> 16;  // Byte do timeout_instructions [23..16]
-        prudata[9] = timeout_instructions >> 24;  // MSByte do timeout_instructions [31..24]
+    if(prudata[SHRAM_OFFSET_485_MODE]=='M'){
+        prudata[SHRAM_OFFSET_485_TIMEOUT]   = timeout_instructions;
+        prudata[SHRAM_OFFSET_485_TIMEOUT+1] = timeout_instructions >> 8;
+        prudata[SHRAM_OFFSET_485_TIMEOUT+2] = timeout_instructions >> 16;
+        prudata[SHRAM_OFFSET_485_TIMEOUT+3] = timeout_instructions >> 24;
     }
 
     // ----- Tamanho dos dados
-    prudata[OFFSET_SHRAM_WRITE] = *tamanho;           // LSByte do tamanho dos dados [7..0]
-    prudata[OFFSET_SHRAM_WRITE+1] = *tamanho >> 8;    // Byte do tamanho dos dados [15..8]
-    prudata[OFFSET_SHRAM_WRITE+2] = *tamanho >> 16;   // Byte do tamanho dos dados [23..16]
-    prudata[OFFSET_SHRAM_WRITE+3] = *tamanho >> 24;   // MSByte do tamanho dos dados [31..24]
+    prudata[SHRAM_OFFSET_WRITE]   = *tamanho;
+    prudata[SHRAM_OFFSET_WRITE+1] = *tamanho >> 8;
+    prudata[SHRAM_OFFSET_WRITE+2] = *tamanho >> 16;
+    prudata[SHRAM_OFFSET_WRITE+3] = *tamanho >> 24;
 
 
     // ----- Insere na memoria - Dados a enviar
     for(i=0; i<*tamanho; i++){
-        prudata[OFFSET_SHRAM_WRITE+4+i] = data[i];
+        prudata[SHRAM_OFFSET_WRITE+4+i] = data[i];
     }
 
     // ----- Dados prontos para envio
-    prudata[1] = MENSAGEM_PARA_ENVIAR;
+    prudata[SHRAM_OFFSET_DATA_STATUS] = NEW_SENDING_DATA;
 
     // ----- Aguarda sinal de finalizacao do ciclo
     prussdrv_pru_wait_event(PRU_EVTOUT_1);
@@ -940,16 +914,18 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
 
     // Aguarda dados prontos na Shared RAM (M) ou fim do envio (S)
-    if(prudata[25] == 'M'){
-        while(prudata[1] != MENSAGEM_ANTIGA); 
+    if(prudata[SHRAM_OFFSET_485_MODE] == 'M'){
+        while(prudata[SHRAM_OFFSET_DATA_STATUS] != OLD_DATA); 
     }
 
     // ----- SLAVE: Aguarda fim de envio
-    if(prudata[25]=='S'){
-        while(prudata[1] != MENSAGEM_ANTIGA);
+    if(prudata[SHRAM_OFFSET_485_MODE]=='S'){
+        while(prudata[SHRAM_OFFSET_DATA_STATUS] != OLD_DATA);
     }
 
-    prudata[OFFSET_SHRAM_FF_MUTEX_485] = FF_MUTEX_485_FREE;
+    while(prudata[SHRAM_OFFSET_MUTEX_ARM_REQUEST] != MUTEX_485_FREE){
+    }
+
     return OK;
 }
 
@@ -967,7 +943,7 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho_recv, uint32_t bytes2read){
         *tamanho_recv = pru_pointer - read_pointer;
     }
     else{
-        *tamanho_recv = BUFF_SIZE - (read_pointer - pru_pointer);
+        *tamanho_recv = INCOMING_BUFF_SIZE - (read_pointer - pru_pointer);
     }
 
     if((bytes2read != 0) & (*tamanho_recv > bytes2read)){
@@ -978,7 +954,7 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho_recv, uint32_t bytes2read){
         data[index] = receive_buffer[read_pointer];
         read_pointer++;
         // Reset pointer
-        if(read_pointer == BUFF_SIZE){
+        if(read_pointer == INCOMING_BUFF_SIZE){
             read_pointer = 0;
         }
     }
@@ -1018,10 +994,10 @@ int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
 
 
     // ----- ID Max Range
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+0] = (uint32_t)(*(uint32_t*)&max_range) >> 0;    // LSByte [7..0]
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+1] = (uint32_t)(*(uint32_t*)&max_range) >> 8;    // Byte [15..8]
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+2] = (uint32_t)(*(uint32_t*)&max_range) >> 16;   // Byte [23..16]
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+3] = (uint32_t)(*(uint32_t*)&max_range) >> 24;   // MSByte [31..24]
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+0] = (uint32_t)(*(uint32_t*)&max_range) >> 0;
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+1] = (uint32_t)(*(uint32_t*)&max_range) >> 8;
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+2] = (uint32_t)(*(uint32_t*)&max_range) >> 16;
+    prudata[SHRAM_OFFSET_FF_MAX_RANGE+3] = (uint32_t)(*(uint32_t*)&max_range) >> 24;
 
 
     // ----- DDR address - FeedForward operations
@@ -1033,10 +1009,10 @@ int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
     fclose(fp);
 
     ff_init_table_addr = DDR_address[0] + CURVE_TOTAL_RESERVED_BYTES;
-    prudata[38] = (ff_init_table_addr) >> 0;    // LSByte [7..0]
-    prudata[39] = (ff_init_table_addr) >> 8;    // Byte [15..8]
-    prudata[40] = (ff_init_table_addr) >> 16;   // Byte [23..16]
-    prudata[41] = (ff_init_table_addr) >> 24;   // MSByte [31..24]
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR]   = (ff_init_table_addr) >> 0;
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+1] = (ff_init_table_addr) >> 8;
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+2] = (ff_init_table_addr) >> 16;
+    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+3] = (ff_init_table_addr) >> 24;
 
 
     // ----- Split memory alocation into desired number of tables
@@ -1051,6 +1027,7 @@ int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
 
     return OK;
 }
+
 
 void ff_enable(){
     write_shram(SHRAM_OFFSET_FF_ENABLED, STS_FF_ENABLED);
@@ -1095,6 +1072,7 @@ int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, ui
     return OK;
 }
 
+
 uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table){
 
     if(table >= prudata[SHRAM_OFFSET_FF_N_TABLES]){
@@ -1119,6 +1097,7 @@ uint16_t ff_read_current_pointer(){
    
     return ((prudata[SHRAM_OFFSET_FF_POINTER+1]<<8) + prudata[SHRAM_OFFSET_FF_POINTER]);
 }
+
 
 int ff_read_current_position(){
 
