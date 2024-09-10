@@ -8,7 +8,7 @@ RS-485 communication via PRU
 Interfaces with SERIALxxCON Hardware (v2-3)
 
 Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
-Controls Group
+Controls Group | Electronic Instrumentation Group
 
 Author: Patricia HENRIQUES NALLIN
 Date: July/2024
