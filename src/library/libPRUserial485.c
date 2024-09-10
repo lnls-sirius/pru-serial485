@@ -462,6 +462,23 @@ PyObject* pru_ff_read_current_position(PyObject* self, PyObject *args)
 }
 
 
+// ------------------------------------------------------------------------------------------------
+// int PRUserial485_ff_read_flags -> uint8_t ff_read_flags()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_read_flags(PyObject* self, PyObject *args)
+{
+    return Py_BuildValue("i", ff_read_flags());
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// void PRUserial485_ff_clear_flags() -> void ff_clear_flags()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_ff_clear_flags(PyObject* self, PyObject *args)
+{
+    ff_clear_flags();
+    return Py_BuildValue("s", NULL);
+}
 
 
 // ------------------------------------------------------------------------------------------------
@@ -496,6 +513,8 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_ff_read_current_table",	 (PyCFunction)pru_ff_read_current_table,    METH_VARARGS, NULL},
     {"PRUserial485_ff_read_current_pointer", (PyCFunction)pru_ff_read_current_pointer,  METH_VARARGS, NULL},
     {"PRUserial485_ff_read_current_position",(PyCFunction)pru_ff_read_current_position, METH_VARARGS, NULL},
+    {"PRUserial485_ff_read_flags",           (PyCFunction)pru_ff_read_flags,            METH_VARARGS, NULL},
+    {"PRUserial485_ff_clear_flags",          (PyCFunction)pru_ff_clear_flags,           METH_VARARGS, NULL},
     {"__version__",                          (PyCFunction)pru_version,                  METH_VARARGS, NULL},
     {NULL}
 };

@@ -1106,3 +1106,14 @@ int ff_read_current_position(){
 
     return *(int16_t*)(&raw_pos);
 }
+
+
+uint8_t ff_read_flags(){
+   
+    return prudata[SHRAM_OFFSET_FF_FLAGS];
+}
+
+void ff_clear_flags(){
+   
+    prudata[SHRAM_OFFSET_FF_FLAGS] = 0;
+}

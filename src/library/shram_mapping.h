@@ -66,7 +66,7 @@ Date: July/2024
  * 11005..11499 FeedForward Mode: Reserved to FF Data from CLP
  * 11500..11999 FeedForward Mode: Reserved to FF Pre-Data from CLP
  * 
- * 12000        FeedForward Mode: General purpose (debugs)
+ * 12000        FeedForward Mode: Warning flags
 
 
 */
@@ -110,3 +110,4 @@ Date: July/2024
 #define SHRAM_OFFSET_FF_TABLE               37
 #define SHRAM_OFFSET_FF_TABLE_ABS_ADDR      38
 #define SHRAM_OFFSET_FF_POSITION            11001
+#define SHRAM_OFFSET_FF_FLAGS               12000
