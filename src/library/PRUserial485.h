@@ -8,10 +8,10 @@ RS-485 communication via PRU
 Interfaces with SERIALxxCON Hardware (v2-3)
 
 Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
-Controls Group
+Controls Group | Electronic Instrumentation Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: July/2024
+Date: October/2024
 */
 
 #include <stdio.h>
@@ -314,137 +314,6 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
  *
 */
 int recv_flush();
-
-
-
-/* FF - CONFIGURACOES INICIAIS E INICIALIZACAO DA PRU
- *
- * --Parametros--
- * idType: tipo de ID (0: Delta | 1: IVU | 2: VPU)
- * nTables: quantidade de polarizacoes/modos/tabelas a serem pré-configuradas
- * max_range: posicao maxima do ID (gap/fase), em micrometros.
- * --Retorno--
- * OK
- * ERR
- *
-*/
-int ff_configure(uint8_t idType, uint8_t nTables, float max_range);
-
-
-
-/* FF - HABILITAR
- * Habilita loop feed-forward: aquisição de dados de posição + envio de setpoints de corrente, que devem ser previamente configurados (tabelas)
- *
-*/
-void ff_enable();
-
-
-
-/* FF - DESABILITAR
- * Habilita loop feed-forward: aquisição de dados de posição + envio de setpoints de corrente, que devem ser previamente configurados (tabelas)
- *
-*/
-void ff_disable();
-
-
-
-/* FF - STATUS DE OPERAÇÃO
- *
- * Estado do loop de controle da operação de ajustes de corrente.
- * --Retorno--
- * 0: desabilitado
- * Diferente de 0: habilitado
- *
-*/
-int ff_get_status();
-
-
-
-/* FF - TAMANHO DA TABELA DE CORRECAO
- *
- * --Retorno--
- * Tamanho, em quantidade de pontos, de cada tabela referente à uma fonte.
- *
-*/
-int ff_get_table_size();
-
-
-
-/* FF - CARREGAMENTO DOS PONTOS DAS TABELAS
- *
- * --Parametro--
- * curveX: vetor dos pontos da curva, correnspondente a cada fonte FBP do bastidor, em ponto flutuante
- * table_points: numero de pontos de cada tabela/curva. Todas as tabelas devem ter o MESMO tamanho.
- * table: numero referencial da tabela na qual a curva sera armazenada.
- * --Retorno--
- * OK
- * ERR...
- *
-*/
-int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table);
-
-
-
-/* FF - LEITURA DOS PONTOS DAS TABELAS
- *
- * --Parametros--
- * curveX: vetor para armazenamento dos pontos da curva, correnspondente a cada fonte FBP do bastidor, em ponto flutuante
- * table: numero referencial das tabelas a serem consultadas.
- * --Retorno--
- * Quantidade de pontos de cada curva, correspondente a cada fonte FBP
- *
-*/
-uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table);
-
-
-
-/* FF - TABELA EM USO
- *
- * --Retorno--
- * Numero da tabela em uso, correspondente ao modo/polarizacao do ID
- *
-*/
-uint8_t ff_read_current_table();
-
-
-
-/* FF - PONTEIRO DA TABELA DE CORRECAO
- *
- * --Retorno--
- * Indice/Ponteiro relativo ao último ponto aplicado da tabela de correcao
- *
-*/
-uint16_t ff_read_current_pointer();
-
-
-
-/* FF - GAP/FASE
- *
- * --Retorno--
- * Valor do gap/fase atual recebido
- *
-*/
-int ff_read_current_position();
-
-
-
-/* FF - FLAGS DE SINALIZACAO
- *
- * --Retorno--
- * Byte [b7..b0] com os flags.
- *
-*/
-uint8_t ff_read_flags();
-
-
-
-/* FF - LIMPA FLAGS
- * Reinicializa flags de sinalização da operação feed-forward
- *
-*/
-void ff_clear_flags();
-
-
 
 
 #ifdef __cplusplus

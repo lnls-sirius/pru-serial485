@@ -11,7 +11,7 @@ Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
 Controls Group | Electronic Instrumentation Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: July/2024
+Date: October/2024
 */
 
 #include "PRUserial485.h"
@@ -22,14 +22,9 @@ Date: July/2024
 #include <signal.h>
 
 
-
-
 // --- PRU mapping
 #define PRU_485_NUM                         1 // Primary PRU
 #define PRU_485_BINARY                      "/usr/bin/PRUserial485.bin"
-#define PRU_FF_NUM                          0 // Secondary PRU
-#define PRU_FF_BINARY                       "/usr/bin/firmware.bin"
-#define PRU_FF_DATA                         "/usr/bin/data.bin"
 
 
 // --- ARM Registers
@@ -71,17 +66,6 @@ Date: July/2024
 #define CURVE_TOTAL_RESERVED_BYTES          CURVE_MAX_BLOCKS*CURVE_BYTES_PER_BLOCK
 #define CURVE_MAX_POINTS_PER_BLOCK          CURVE_BYTES_PER_BLOCK/16
 
-
-// --- FeedForward variables - PRU2
-#define FF_TABLES_TOTAL_BYTES_RESERVED      600000
-#define FF_MIN_TABLES                       1
-#define FF_MAX_TABLES                       6
-#define FF_DELTA_ID_TYPE                    0
-#define FF_IVU_ID_TYPE                      1
-#define FF_VPU_ID_TYPE                      2
-#define FF_DELTA_MAX_RANGE                  52000.0 // [um]
-#define FF_IVU_MAX_RANGE                    22000.0 // [um]
-#define FF_VPU_MAX_RANGE                    20000.0 // [um]
 
 
 
@@ -970,150 +954,4 @@ int recv_flush(){
     }
     pthread_mutex_unlock(&lock);
     return OK;
-}
-
-
-int ff_configure(uint8_t id_type, uint8_t n_tables, float max_range){
-
-    if((id_type == FF_DELTA_ID_TYPE) | \
-       (id_type == FF_IVU_ID_TYPE) |   \
-       (id_type == FF_VPU_ID_TYPE)){
-        prudata[SHRAM_OFFSET_FF_ID_TYPE] = id_type;
-    }
-    else{
-        return ERR_FF_IDTYPE;
-    }
-    
-
-    if((n_tables < FF_MIN_TABLES) | (n_tables > FF_MAX_TABLES)){
-        return ERR_FF_TABLE_NUMBER;
-    }
-
-    // ----- Disable FeedForward PRU
-    prussdrv_pru_disable(PRU_FF_NUM);
-
-
-    // ----- ID Max Range
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+0] = (uint32_t)(*(uint32_t*)&max_range) >> 0;
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+1] = (uint32_t)(*(uint32_t*)&max_range) >> 8;
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+2] = (uint32_t)(*(uint32_t*)&max_range) >> 16;
-    prudata[SHRAM_OFFSET_FF_MAX_RANGE+3] = (uint32_t)(*(uint32_t*)&max_range) >> 24;
-
-
-    // ----- DDR address - FeedForward operations
-    unsigned int DDR_address[2], ff_init_table_addr;
-
-    FILE* fp;
-    fp = fopen(MMAP1_LOC "addr", "rt");
-    fscanf(fp, "%x", &DDR_address[0]);
-    fclose(fp);
-
-    ff_init_table_addr = DDR_address[0] + CURVE_TOTAL_RESERVED_BYTES;
-    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR]   = (ff_init_table_addr) >> 0;
-    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+1] = (ff_init_table_addr) >> 8;
-    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+2] = (ff_init_table_addr) >> 16;
-    prudata[SHRAM_OFFSET_FF_TABLE_ABS_ADDR+3] = (ff_init_table_addr) >> 24;
-
-
-    // ----- Split memory alocation into desired number of tables
-    prudata[SHRAM_OFFSET_FF_N_TABLES] = n_tables;
-    bytes_per_table = FF_TABLES_TOTAL_BYTES_RESERVED / n_tables;
-    max_points_per_table = bytes_per_table / 16;
-
-
-    // ----- Run code on PRU
-    prussdrv_load_datafile(PRU_FF_NUM, PRU_FF_DATA);
-    prussdrv_exec_program (PRU_FF_NUM, PRU_FF_BINARY);
-
-    return OK;
-}
-
-
-void ff_enable(){
-    write_shram(SHRAM_OFFSET_FF_ENABLED, STS_FF_ENABLED);
-}
-
-
-void ff_disable(){
-    write_shram(SHRAM_OFFSET_FF_ENABLED, STS_FF_DISABLED);
-}
-
-
-int ff_get_status(){
-
-    if (prudata[SHRAM_OFFSET_FF_ENABLED]){
-        return STS_FF_ENABLED;
-    }
-    else{
-        return STS_FF_DISABLED;
-    }
-}
-
-
-int ff_get_table_size(){
-
-    return max_points_per_table;
-}
-
-
-int ff_load_table(float *curve1, float *curve2, float *curve3, float *curve4, uint32_t table_points, uint8_t table){
-
-    if(table >= prudata[SHRAM_OFFSET_FF_N_TABLES]){
-        return ERR_CURVE_OVER_BLOCK;
-    }
-    if(table_points > max_points_per_table){
-        return ERR_CURVE_OVER_POINTS;
-    }
-
-    unsigned int offset_ff = (table * (bytes_per_table)) + CURVE_TOTAL_RESERVED_BYTES;
-
-    load_ddr(offset_ff, table_points, curve1, curve2, curve3, curve4);
-   
-    return OK;
-}
-
-
-uint32_t ff_read_table(float *curve1, float *curve2, float *curve3, float *curve4, uint8_t table){
-
-    if(table >= prudata[SHRAM_OFFSET_FF_N_TABLES]){
-        return ERR_CURVE_OVER_BLOCK;
-    }
-
-    unsigned int offset_ff = (table * (bytes_per_table)) + CURVE_TOTAL_RESERVED_BYTES;
-
-    read_ddr(offset_ff, max_points_per_table, curve1, curve2, curve3, curve4);
-    
-    return max_points_per_table;
-}
-
-
-uint8_t ff_read_current_table(){
-   
-    return prudata[SHRAM_OFFSET_FF_TABLE];
-}
-
-
-uint16_t ff_read_current_pointer(){
-   
-    return ((prudata[SHRAM_OFFSET_FF_POINTER+1]<<8) + prudata[SHRAM_OFFSET_FF_POINTER]);
-}
-
-
-int ff_read_current_position(){
-
-    uint16_t raw_pos;
-    raw_pos = (prudata[SHRAM_OFFSET_FF_POSITION+1]<<8) + prudata[SHRAM_OFFSET_FF_POSITION];
-
-    return *(int16_t*)(&raw_pos);
-}
-
-
-uint8_t ff_read_flags(){
-   
-    return prudata[SHRAM_OFFSET_FF_FLAGS];
-}
-
-void ff_clear_flags(){
-   
-    prudata[SHRAM_OFFSET_FF_FLAGS] = 0;
 }

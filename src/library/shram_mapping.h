@@ -8,10 +8,10 @@ Shared RAM Memory Mapping for PRUserial485 application
 Interfaces with SERIALxxCON Hardware (v2-3)
 
 Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
-Controls Group
+Controls Group | Electronic Instrumentation Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: July/2024
+Date: October/2024
 */
 
 
