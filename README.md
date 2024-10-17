@@ -6,6 +6,29 @@ _PRU-based high performance serial communication_
 _Author:_  
 Patricia H. Nallin ( _patricia.nallin@lnls.br_ )
 
+
+
+
+_____
+
+
+### Dependancies
+
+* uio_pruss module
+* prussdrv C library
+
+_____
+
+
+### Memory mapping
+
+This applications reserves 2 MB from DDR memory via modprobe uio_pruss.
+* 400 kB for sync curves
+* 600 kB for FF application
+* 1 MB for future needs
+
+
+
 _____
 
 
@@ -22,9 +45,9 @@ _____
 
 _**Before using it**_
 
-1. Apply the Device Tree Overlay (DTO) to configure Beaglebone pins to PRU. Run `overlay.sh` script each time you restart your Beaglebone.
+1. Configure Beaglebone pins to PRU. Run `overlay.sh` script each time you restart your Beaglebone.
 
-2. In your python3 code, you can just:
+2. In your python-sirius (python3) code, you can just:
 ```python
 import PRUserial485
 ```  
@@ -42,7 +65,7 @@ _**General Purpose**_
 
    PRU initialization. Shared memory configuration and loading binaries into PRU.  
    * _baudrate:_  
-   RS485 serial desired baudrate. Available: 9600, 14400, 19200, 38400, 57600, 115200 bps and 6, 10, 12 Mbps
+   RS485 serial desired baudrate. Available: 9600, 14400, 19200, 38400, 57600, 115200 bps and 1, 6, 10, 12 Mbps
    * _mode:_  
    "M" for master and "S" for slave mode.
 
