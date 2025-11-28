@@ -90,17 +90,17 @@ Date: May/2020
 *        | 0x5B - Single Sequence - Single Broadcast Function command
 *
 *
-* SHRAM[100] ~ SHRAM[6k-1] - Sending Data
+* SHRAM[100] ~ SHRAM[6143] - Sending Data
 *
 * prudata[100..103] = Tamanho do vetor de dados
 * prudata[104..] = vetor de dados
 *
 *
 *
-* SHRAM[6k] ~ SHRAM[12k-1] - Receiving Data
+* SHRAM[6144] ~ SHRAM[12k-1] - Receiving Data
 *
-* prudata[6k..6k+3] = Tamanho do vetor de dados
-* prudata[6k+4..] = vetor de dados
+* prudata[6144..6147] = Tamanho do vetor de dados
+* prudata[6148..] = vetor de dados
 */
 
 
