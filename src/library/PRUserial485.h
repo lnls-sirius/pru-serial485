@@ -1,5 +1,5 @@
 /*
-PRUserial485.c
+PRUserial485.h
 
 
 --------------------------------------------------------------------------------
@@ -8,10 +8,10 @@ RS-485 communication via PRU
 Interfaces with SERIALxxCON Hardware (v2-3)
 
 Brazilian Synchrotron Light Laboratory (LNLS/CNPEM)
-Controls Group
+Controls Group | Electronic Instrumentation Group
 
 Author: Patricia HENRIQUES NALLIN
-Date: May/2020
+Date: October/2024
 */
 
 #include <stdio.h>
@@ -23,6 +23,9 @@ Date: May/2020
 #include <pruss_intc_mapping.h>
 
 
+
+
+
 /* Return codes */
 
 #define SYNC_OFF 0                 // sync_status
@@ -32,10 +35,17 @@ Date: May/2020
 #define ERR_LD_CURVE_MOPEN 2       // loadCurve
 #define ERR_LD_CURVE_MMAP 3        // loadCurve
 #define ERR_LD_CURVE_UMMAP 4       // loadCurve
+#define ERR_CURVE_OVER_BLOCK 11    // loadCurve + setCurveBlock
+#define ERR_CURVE_OVER_POINTS 12   // loadCurve + setCurvePointer
 #define ERR_INIT_PRU_SSDRV 5       // init_start_PRU
 #define ERR_INIT_PRU_MODE 6        // init_start_PRU
 #define ERR_INIT_PRU_BAUDR 7       // init_start_PRU
 #define ERR_RECV_DATA_OLDMSG 8     // recv_data_PRU
+#define ERR_FF_TABLE_NUMBER 9      // ff_configure
+#define ERR_FF_IDTYPE 10           // ff_configure
+#define STS_FF_ENABLED 1
+#define STS_FF_DISABLED 0
+
 
 
 
@@ -49,8 +59,17 @@ extern "C" {
  * --Retorno--
  * Retorna o endereco fisico da placa, selecionado em hardware.
  * Util apenas no modo SLAVE
+ * 
 */
 uint8_t hardware_address_serialPRU();
+
+
+
+int load_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4);
+
+
+
+uint32_t read_ddr(unsigned int ddr_offset, uint32_t table_points, float *curve1, float *curve2, float *curve3, float *curve4);
 
 
 
@@ -62,6 +81,7 @@ uint8_t hardware_address_serialPRU();
  * --Retorno--
  *  OK              : apos zerar contador
  *  ERR_CLEAR_PULSE : Caso o modo sincrono esteja habilitado no modo master
+ * 
 */
 int clear_pulse_count_sync();
 
@@ -73,8 +93,33 @@ int clear_pulse_count_sync();
  * --Retorno--
  * Valor do contador de pulsos
  * (Contagem de pulsos físicos no modo MASTER --- Contagem de mensagem de passo sync no modo SLAVE)
+ * 
 */
 uint32_t read_pulse_count_sync();
+
+
+
+/* USO GERAL - LEITURA DE BYTE DA MEMORIA COMPARTILHADA (SHARED RAM)
+ *
+ * --Parametro--
+ * offset: index do byte a ser lido
+ * --Retorno--
+ * Valor do byte
+ * 
+*/
+uint8_t read_shram(uint16_t offset);
+
+
+
+/* USO GERAL - ESCRITA EM BYTE DA MEMORIA COMPARTILHADA (SHARED RAM)
+ *
+ *
+ * --Parametro--
+ * offset: index do byte a ser escrito
+ * value: valor a ser escrito
+ * 
+*/
+void write_shram(uint16_t offset, uint8_t value);
 
 
 
@@ -84,6 +129,7 @@ uint32_t read_pulse_count_sync();
  * --Parametro--
  * new_pointer: ponto de onde a curva sera executada a partir do proximo pulso de sincronismo. Parametro incrementado
  * automaticamente apos cada pulso.
+ * 
 */
 void set_curve_pointer(uint32_t new_pointer);
 
@@ -94,7 +140,7 @@ void set_curve_pointer(uint32_t new_pointer);
 * --Retorno--
  * MODO MASTER:
  * A funcao retorna o indice do proximo ponto que sera executado, apos o pulso de sincronismo.
- *
+ * 
 */
 uint32_t read_curve_pointer();
 
@@ -106,7 +152,7 @@ uint32_t read_curve_pointer();
  * MODO MASTER:
  * SYNC_ON : pronto
  * SYNC_OFF: desarmado
- *
+ * 
 */
 int sync_status();
 
@@ -124,6 +170,7 @@ int sync_status();
  * delay: tempo aproximado entre o fim da mensagem de sincronismo e o inicio de uma mensagem normal de requisicao. Unidade: microssegundos.
  * sync_address: endereco do controlador que recebera os comandos de SetIx4 (setpoints da curva) -> Caso modo != 0x5B
  * Sinaliza o inicio do procedimento sincrono via PRU
+ * 
 */
 void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_address);
 
@@ -134,6 +181,7 @@ void set_sync_start_PRU(uint8_t sync_mode, uint32_t delay_us, uint8_t sync_addre
  * SOMENTE MODO MASTER
  *
  * Sinaliza o encerramento do procedimento sincrono via PRU
+ * 
 */
 void set_sync_stop_PRU();
 
@@ -141,6 +189,7 @@ void set_sync_stop_PRU();
 
 /* DESABILITA PRU
  * Encerra atividade da PRU e fecha o mapeamento da memoria compartilhada
+ *
 */
 void close_PRU();
 
@@ -192,6 +241,7 @@ uint8_t read_curve_block();
  * mode: modo de operacao. 'M' para master e 'S' para slave
  *
  * Velocidades disponiveis:
+ * (1)     Mbps    |
  * (6)     Mbps    |  (19200)  bps
  * (10)    Mbps    |  (38400)  bps
  * (12)    Mbps    |  (57600)  bps
@@ -223,6 +273,7 @@ int init_start_PRU(int baudrate, char mode);
  *
  * MODO SLAVE:
  * A funcao retorna OK apos o envio dos dados
+ * 
 */
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
 
@@ -249,6 +300,7 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
  * OK                   : apos a copia dos novos dados recebidos nos enderecos
  *                        indicados pelos parametros da funcao.
  * ERR_RECV_DATA_OLDMSG : caso nao exista novos dados de recepcao no buffer
+ * 
 */
 int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
 

@@ -4,9 +4,9 @@
 // Mapping .c functions into Python methods in order to ease code development without losing
 // performance.
 //
-// CONTROLS GROUP
 // Author: Patricia Nallin (patricia.nallin@lnls.br)
-// Release Date: May 18, 2020
+// Controls Group | Electronic Instrumentation Group
+// Release Date: October, 2024
 //
 // ------------------------------------------------------------------------------------------------
 
@@ -181,6 +181,45 @@ PyObject* pru_read_curve_block(PyObject* self, PyObject *args)
 }
 
 
+
+// ---------------------------------------------------------------------------$
+// int PRUserial485_shram(int offset) -> int read_shram(uint16_t offset)
+// ---------------------------------------------------------------------------$
+PyObject* pru_read_shram(PyObject* self, PyObject *args)
+{
+        int offst;
+
+        if (!PyArg_ParseTuple(args, "i", &offst))
+    {
+                return NULL;
+        }
+
+    return Py_BuildValue("i", read_shram(offst));
+}
+
+
+
+// ---------------------------------------------------------------------------$
+// void PRUserial485_shram_write(int offset, uint8_t value) -> void write_shram(uint16_t offset, uint8_t value)
+// ---------------------------------------------------------------------------$
+PyObject* pru_write_shram(PyObject* self, PyObject *args)
+{
+        int offst;
+        int value = 0;
+
+        if (!PyArg_ParseTuple(args, "ii", &offst, &value)){
+                return NULL;
+        }
+        write_shram(offst, value);
+
+    return Py_BuildValue("s", NULL);
+}
+
+
+
+
+
+
 // ------------------------------------------------------------------------------------------------
 // int PRUserial485_open(int baudrate, char mode) -> int init_start_PRU(int baudrate, char mode)
 // ------------------------------------------------------------------------------------------------
@@ -193,6 +232,7 @@ PyObject* pru_open(PyObject* self, PyObject *args)
     {
  		return NULL;
  	}
+        
 
     return Py_BuildValue("i", init_start_PRU(br,mode));
 }
@@ -272,25 +312,26 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 // ------------------------------------------------------------------------------------------------
 // Python Module definitions, methods and initialization
 // ------------------------------------------------------------------------------------------------
-
 static PyMethodDef pruserial485_funcs[] = {
-    {"PRUserial485_address",                (PyCFunction)pru_address,                 METH_VARARGS, NULL},
-    {"PRUserial485_clear_pulse_count_sync", (PyCFunction)pru_clear_pulse_count_sync,  METH_VARARGS, NULL},
-    {"PRUserial485_read_pulse_count_sync",  (PyCFunction)pru_read_pulse_count_sync,   METH_VARARGS, NULL},
-    {"PRUserial485_set_curve_pointer",      (PyCFunction)pru_set_curve_pointer,       METH_VARARGS, NULL},
-    {"PRUserial485_read_curve_pointer",     (PyCFunction)pru_read_curve_pointer,      METH_VARARGS, NULL},
-    {"PRUserial485_sync_status",            (PyCFunction)pru_sync_status,             METH_VARARGS, NULL},
-    {"PRUserial485_sync_start",             (PyCFunction)pru_sync_start,              METH_VARARGS, NULL},
-    {"PRUserial485_sync_stop",              (PyCFunction)pru_sync_stop,               METH_VARARGS, NULL},
-    {"PRUserial485_close",                  (PyCFunction)pru_close,                   METH_VARARGS, NULL},
-    {"PRUserial485_curve",                  (PyCFunction)pru_load_curve_block,        METH_VARARGS, NULL},
-    {"PRUserial485_set_curve_block",        (PyCFunction)pru_set_curve_block,         METH_VARARGS, NULL},
-    {"PRUserial485_read_curve_block",       (PyCFunction)pru_read_curve_block,        METH_VARARGS, NULL},
-    {"PRUserial485_open",                   (PyCFunction)pru_open,                    METH_VARARGS, NULL},
-    {"PRUserial485_write",                  (PyCFunction)pru_send,                    METH_VARARGS, NULL},
-    {"PRUserial485_read",                   (PyCFunction)pru_recv,                    METH_VARARGS, NULL},
-    {"PRUserial485_read_flush",             (PyCFunction)pru_recv_flush,              METH_VARARGS, NULL},
-    {"__version__",                         (PyCFunction)pru_version,                 METH_VARARGS, NULL},
+    {"PRUserial485_address",                 (PyCFunction)pru_address,                  METH_VARARGS, NULL},
+    {"PRUserial485_clear_pulse_count_sync",  (PyCFunction)pru_clear_pulse_count_sync,   METH_VARARGS, NULL},
+    {"PRUserial485_read_pulse_count_sync",   (PyCFunction)pru_read_pulse_count_sync,    METH_VARARGS, NULL},
+    {"PRUserial485_set_curve_pointer",       (PyCFunction)pru_set_curve_pointer,        METH_VARARGS, NULL},
+    {"PRUserial485_read_curve_pointer",      (PyCFunction)pru_read_curve_pointer,       METH_VARARGS, NULL},
+    {"PRUserial485_sync_status",             (PyCFunction)pru_sync_status,              METH_VARARGS, NULL},
+    {"PRUserial485_sync_start",              (PyCFunction)pru_sync_start,               METH_VARARGS, NULL},
+    {"PRUserial485_sync_stop",               (PyCFunction)pru_sync_stop,                METH_VARARGS, NULL},
+    {"PRUserial485_close",                   (PyCFunction)pru_close,                    METH_VARARGS, NULL},
+    {"PRUserial485_curve",                   (PyCFunction)pru_load_curve_block,         METH_VARARGS, NULL},
+    {"PRUserial485_set_curve_block",         (PyCFunction)pru_set_curve_block,          METH_VARARGS, NULL},
+    {"PRUserial485_read_curve_block",        (PyCFunction)pru_read_curve_block,         METH_VARARGS, NULL},
+    {"PRUserial485_open",                    (PyCFunction)pru_open,                     METH_VARARGS, NULL},
+    {"PRUserial485_write",                   (PyCFunction)pru_send,                     METH_VARARGS, NULL},
+    {"PRUserial485_read",                    (PyCFunction)pru_recv,                     METH_VARARGS, NULL},
+    {"PRUserial485_read_flush",              (PyCFunction)pru_recv_flush,               METH_VARARGS, NULL},
+    {"PRUserial485_shram", 		             (PyCFunction)pru_read_shram,               METH_VARARGS, NULL},
+    {"PRUserial485_write_shram",	         (PyCFunction)pru_write_shram,              METH_VARARGS, NULL},
+    {"__version__",                          (PyCFunction)pru_version,                  METH_VARARGS, NULL},
     {NULL}
 };
 

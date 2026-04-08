@@ -27,6 +27,11 @@ elif [ "${KERNEL_VERSION%.*}" = "4.14" ]; then
     config-pin P8_33 in_pd          # SW address 3
     config-pin P8_34 in_pd          # SW address 4
     config-pin P8_35 in_pd          # SW address 5
+    config-pin P9_17 pru_uart
+    config-pin P9_17 pru_uart
+    config-pin P9_24 pru_uart
+    config-pin P9_26 pru_uart
+    config-pin P9_27 pruout
 else
     echo "Version not supported"
 fi
