@@ -105,7 +105,8 @@ Date: October/2024
 #define SHRAM_OFFSET_FF_ENABLED             14
 #define SHRAM_OFFSET_FF_N_TABLES            42
 #define SHRAM_OFFSET_FF_ID_TYPE             43
-#define SHRAM_OFFSET_FF_MAX_RANGE           44
+#define SHRAM_OFFSET_FF_MAX_RANGE           86
+#define SHRAM_OFFSET_FF_MIN_RANGE           90
 #define SHRAM_OFFSET_FF_POINTER             35
 #define SHRAM_OFFSET_FF_TABLE               37
 #define SHRAM_OFFSET_FF_TABLE_ABS_ADDR      38
