@@ -616,8 +616,6 @@ void *monitorRecvBuffer(void *arg){
             // Aguarda dado salvo na SHRAM
             while(prudata[SHRAM_OFFSET_DATA_STATUS] != NEW_INCOMING_DATA){
             }
-            // ----- Sinaliza mensagem antiga
-            prudata[SHRAM_OFFSET_DATA_STATUS] = OLD_DATA;
 
             // Le ponteiro da PRU
             pru_recv_pointer = 0;
@@ -659,6 +657,10 @@ void *monitorRecvBuffer(void *arg){
                 }
             }
             pthread_mutex_unlock(&lock);
+
+            // ----- Sinaliza mensagem antiga (somente apos copiar os dados,
+            // para nao liberar o buffer da PRU antes da copia terminar)
+            prudata[SHRAM_OFFSET_DATA_STATUS] = OLD_DATA;
 
         }
     }
