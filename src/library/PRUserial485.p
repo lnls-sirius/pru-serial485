@@ -754,7 +754,24 @@ WAIT_RECEIVED_SLAVE:
     QBEQ        SEND_DATA_SLAVE, I.b0, 0xff                     // 0x55 : Nada a enviar
 // -------------------------------------------
 
-    QBBS        WAIT_RECEIVED_SLAVE, IRQ                        // Data not received, loop continues
+    // Interrupt fired, byte(s) arrived
+    QBBC        GOT_FIRST_BYTE_SLAVE, IRQ
+
+    // Watchdog: poll RxFIFO level directly instead of relying only on
+    // the empty->non-empty interrupt edge. If the FIFO never returns
+    // to empty between two back-to-back messages, that edge can be
+    // missed and this wait would otherwise stall forever even with
+    // bytes already sitting in the FIFO.
+    CS_DOWN
+    SEND_SPI    0x12, 8
+    RECEIVE_SPI 8
+    CS_UP
+    LSR         BUFFER_SPI_IN, BUFFER_SPI_IN, 4
+
+    // Still empty, keep waiting
+    QBEQ        WAIT_RECEIVED_SLAVE, BUFFER_SPI_IN, 0
+
+GOT_FIRST_BYTE_SLAVE:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
