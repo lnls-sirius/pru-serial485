@@ -4,12 +4,13 @@ install-library:
 	echo "......................................................."; \
 	cd library; \
 	gcc -mfloat-abi=hard -Wall -fPIC -O2 -mtune=cortex-a8 -march=armv7-a -I/usr/include -c -o PRUserial485.o PRUserial485.c; \
-	ar -rv libPRUserial485.a PRUserial485.o; \
-	gcc -shared -Wl,-soname, -o libPRUserial485.so PRUserial485.o; \
+	gcc -mfloat-abi=hard -Wall -fPIC -O2 -mtune=cortex-a8 -march=armv7-a -I/usr/include -c -o sniffer.o sniffer.c; \
+	ar -rv libPRUserial485.a PRUserial485.o sniffer.o; \
+	gcc -shared -Wl,-soname, -o libPRUserial485.so PRUserial485.o sniffer.o -lpthread; \
 	install -m0755 libPRUserial485.a libPRUserial485.so /usr/lib; \
 	ldconfig -n /usr/lib/libPRUserial485.*; \
 	install -m0755 PRUserial485.h /usr/include; \
-	rm PRUserial485.o libPRUserial485.so libPRUserial485.a; \
+	rm PRUserial485.o sniffer.o libPRUserial485.so libPRUserial485.a; \
 	echo ".........................................................."; \
 	echo ".......... Building and installing PRU firmware .........."; \
 	echo ".........................................................."; \
