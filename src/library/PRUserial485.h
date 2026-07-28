@@ -381,6 +381,10 @@ extern volatile uint32_t sniffer_lenfifo_snapshot;
  * log_dir: diretorio onde os arquivos de log rotativos serao criados.
  * rotate_bytes: tamanho maximo (em bytes) de cada arquivo de log antes de
  * rotacionar para um novo arquivo. Se 0, nunca rotaciona.
+ * max_total_bytes: tamanho maximo (em bytes) somado de todos os arquivos
+ * de log neste diretorio. Se excedido, os arquivos mais antigos sao
+ * apagados (o arquivo em uso nunca e apagado) ate caber no limite:
+ * captura circular, nunca para de gravar. Se 0, sem limite.
  *
  * --Retorno--
  * OK
@@ -390,7 +394,7 @@ extern volatile uint32_t sniffer_lenfifo_snapshot;
  * ERR_SNIFFER_THREAD_CREATE    : falha ao criar a thread de captura
  *
 */
-int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes);
+int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t max_total_bytes);
 
 
 

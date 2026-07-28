@@ -310,19 +310,21 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
-// int PRUserial485_sniffer_start(str log_dir, int rotate_bytes) -> int PRUserial485_sniffer_start(const char*, size_t)
+// int PRUserial485_sniffer_start(str log_dir, int rotate_bytes, int max_total_bytes=0)
+// -> int PRUserial485_sniffer_start(const char*, size_t, size_t)
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_sniffer_start(PyObject* self, PyObject *args)
 {
     const char *log_dir;
     long rotate_bytes;
+    long max_total_bytes = 0;
 
-    if (!PyArg_ParseTuple(args, "sl", &log_dir, &rotate_bytes))
+    if (!PyArg_ParseTuple(args, "sl|l", &log_dir, &rotate_bytes, &max_total_bytes))
     {
         return NULL;
     }
 
-    return Py_BuildValue("i", PRUserial485_sniffer_start(log_dir, (size_t)rotate_bytes));
+    return Py_BuildValue("i", PRUserial485_sniffer_start(log_dir, (size_t)rotate_bytes, (size_t)max_total_bytes));
 }
 
 

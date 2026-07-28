@@ -32,6 +32,7 @@ value and is never affected by any of this.
 
 #include "shram_mapping.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -83,9 +84,15 @@ static pthread_t sniffer_thread_id;
 static int sniffer_log_fd = -1;
 static char sniffer_log_dir[512];
 
+// basename only, e.g. "sniff_...log"
+static char   sniffer_log_current_name[256];
+
 // bytes in the *current* file (for rotation)
 static size_t sniffer_log_bytes_written = 0;
 static size_t sniffer_rotate_bytes = 0;
+
+// 0 = unlimited; total across all rotated files
+static size_t sniffer_max_total_bytes = 0;
 static uint32_t sniffer_seq = 0;
 static unsigned sniffer_log_records_since_fsync = 0;
 
@@ -125,14 +132,88 @@ static void write_u64_le(uint8_t *buf, uint64_t v) {
 }
 
 
+// Deletes the oldest "sniff_*.log" files in sniffer_log_dir (filename
+// order matches chronological order, since the timestamp fields are
+// fixed-width for the foreseeable future) until the directory's total
+// size fits within sniffer_max_total_bytes. Never deletes
+// sniffer_log_current_name (the file actively being written to). Best
+// effort: if the directory can't be scanned, does nothing and leaves
+// ENOSPC/write-failure handling as the backstop.
+static void sniffer_log_make_room(void) {
+    if(sniffer_max_total_bytes == 0) {
+        return;
+    }
+
+    for(;;) {
+        DIR *dir;
+        struct dirent *entry;
+        char oldest[256];
+        char path[800];
+        struct stat st;
+        size_t total = 0;
+        int have_oldest = 0;
+
+        dir = opendir(sniffer_log_dir);
+        if(dir == NULL) {
+            return;
+        }
+
+        oldest[0] = '\0';
+        while((entry = readdir(dir)) != NULL) {
+            if(strncmp(entry->d_name, "sniff_", 6) != 0) {
+                continue;
+            }
+            snprintf(path, sizeof(path), "%s/%s", sniffer_log_dir, entry->d_name);
+            if(stat(path, &st) != 0) {
+                continue;
+            }
+            total += (size_t)st.st_size;
+
+            if(strcmp(entry->d_name, sniffer_log_current_name) == 0) {
+                // never a deletion candidate while active
+                continue;
+            }
+            if(!have_oldest || strcmp(entry->d_name, oldest) < 0) {
+                strncpy(oldest, entry->d_name, sizeof(oldest) - 1);
+                oldest[sizeof(oldest) - 1] = '\0';
+                have_oldest = 1;
+            }
+        }
+        closedir(dir);
+
+        if(total <= sniffer_max_total_bytes) {
+            return;
+        }
+        if(!have_oldest) {
+            // nothing left we're allowed to delete
+            return;
+        }
+
+        snprintf(path, sizeof(path), "%s/%s", sniffer_log_dir, oldest);
+        fprintf(stderr, "[PRUserial485 sniffer] total log budget of %zu bytes exceeded, "
+                        "deleting oldest log %s\n", sniffer_max_total_bytes, oldest);
+        unlink(path);
+    }
+}
+
+
 static int sniffer_log_open_new_file(void) {
-    char path[600];
+    char path[800];
+    char name[256];
     struct timespec ts;
     int fd;
 
     clock_gettime(CLOCK_REALTIME, &ts);
-    snprintf(path, sizeof(path), "%s/sniff_%ld_%09ld.log",
-             sniffer_log_dir, (long)ts.tv_sec, ts.tv_nsec);
+    snprintf(name, sizeof(name), "sniff_%ld_%09ld.log", (long)ts.tv_sec, ts.tv_nsec);
+    snprintf(path, sizeof(path), "%s/%s", sniffer_log_dir, name);
+
+    // Updating this before make_room() means the *previous* current file
+    // (if any) is no longer protected from deletion, which is correct,
+    // since it's now just another closed, historical file like any other.
+    strncpy(sniffer_log_current_name, name, sizeof(sniffer_log_current_name) - 1);
+    sniffer_log_current_name[sizeof(sniffer_log_current_name) - 1] = '\0';
+
+    sniffer_log_make_room();
 
     fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if(fd < 0) {
@@ -403,7 +484,7 @@ static void *sniffer_capture_thread(void *arg) {
 }
 
 
-int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes) {
+int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t max_total_bytes) {
     // Must be checked before anything else: running the sniffer on a
     // Master or plain Slave connection would apply Passive-mode
     // assumptions (see this file's top comment) to a connection that
@@ -419,6 +500,8 @@ int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes) {
     strncpy(sniffer_log_dir, log_dir, sizeof(sniffer_log_dir) - 1);
     sniffer_log_dir[sizeof(sniffer_log_dir) - 1] = '\0';
     sniffer_rotate_bytes = rotate_bytes;
+    sniffer_max_total_bytes = max_total_bytes;
+    sniffer_log_current_name[0] = '\0';
     sniffer_seq = 0;
     sniffer_write_failed = 0;
 
