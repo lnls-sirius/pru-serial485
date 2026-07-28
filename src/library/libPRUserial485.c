@@ -310,6 +310,33 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 
 
 // ------------------------------------------------------------------------------------------------
+// int PRUserial485_sniffer_start(str log_dir, int rotate_bytes) -> int PRUserial485_sniffer_start(const char*, size_t)
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_sniffer_start(PyObject* self, PyObject *args)
+{
+    const char *log_dir;
+    long rotate_bytes;
+
+    if (!PyArg_ParseTuple(args, "sl", &log_dir, &rotate_bytes))
+    {
+        return NULL;
+    }
+
+    return Py_BuildValue("i", PRUserial485_sniffer_start(log_dir, (size_t)rotate_bytes));
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// void PRUserial485_sniffer_stop() -> void PRUserial485_sniffer_stop()
+// ------------------------------------------------------------------------------------------------
+PyObject* pru_sniffer_stop(PyObject* self, PyObject *args)
+{
+    PRUserial485_sniffer_stop();
+    return Py_BuildValue("s", NULL);
+}
+
+
+// ------------------------------------------------------------------------------------------------
 // Python Module definitions, methods and initialization
 // ------------------------------------------------------------------------------------------------
 static PyMethodDef pruserial485_funcs[] = {
@@ -331,6 +358,8 @@ static PyMethodDef pruserial485_funcs[] = {
     {"PRUserial485_read_flush",              (PyCFunction)pru_recv_flush,               METH_VARARGS, NULL},
     {"PRUserial485_shram", 		             (PyCFunction)pru_read_shram,               METH_VARARGS, NULL},
     {"PRUserial485_write_shram",	         (PyCFunction)pru_write_shram,              METH_VARARGS, NULL},
+    {"PRUserial485_sniffer_start",           (PyCFunction)pru_sniffer_start,            METH_VARARGS, NULL},
+    {"PRUserial485_sniffer_stop",            (PyCFunction)pru_sniffer_stop,             METH_VARARGS, NULL},
     {"__version__",                          (PyCFunction)pru_version,                  METH_VARARGS, NULL},
     {NULL}
 };
