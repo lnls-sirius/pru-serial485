@@ -37,6 +37,7 @@ this file never calls close_PRU() and never sends anything on the bus.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -44,6 +45,13 @@ this file never calls close_PRU() and never sends anything on the bus.
 // matches PRUserial485.c's own INCOMING_BUFF_SIZE, the real capacity of
 // the host-side ring recv_data_PRU() reads from.
 #define SNIFFER_MAX_BATCH_BYTES    100000
+
+// A single message can't plausibly be larger than this: the on-chip
+// receive ring in PRUserial485.c's monitorRecvBuffer (BUFF_RECV_STOP -
+// BUFF_RECV_START, 0x2800 - 0x1803) is only 4093 bytes, the tightest
+// buffer anywhere in this path, so nothing coherent could ever exceed
+// it. A length-fifo entry above this is corrupt, not just large.
+#define SNIFFER_MAX_PLAUSIBLE_MSG_LEN  4093
 
 // Bound on how long the capture thread waits for monitorRecvBuffer's
 // signal before re-checking sniffer_running; keeps shutdown responsive
@@ -59,6 +67,7 @@ this file never calls close_PRU() and never sends anything on the bus.
 #define SNIFFER_LOG_MAGIC_OVERFLOW_ENTRIES  0xEE
 #define SNIFFER_LOG_MAGIC_OVERFLOW_BYTES    0xEF
 #define SNIFFER_LOG_MAGIC_RESYNC            0xED
+#define SNIFFER_LOG_MAGIC_BAD_LENGTH        0xEC
 #define SNIFFER_LOG_VERSION                 0x01
 #define SNIFFER_LOG_HEADER_BYTES            18
 
@@ -96,7 +105,7 @@ static uint32_t sniffer_seq = 0;
 static unsigned sniffer_log_records_since_fsync = 0;
 
 
-// The length-fifo ring lives on-chip (see shram_mapping.h), so reading
+// Length-fifo ring now lives on-chip (see shram_mapping.h), so reading
 // an entry is just two ordinary shared-RAM byte reads through the
 // library's existing public accessor: no DDR, no mmap, no cross-bus
 // read at all. Safe to read without a stability retry (unlike the
@@ -331,6 +340,21 @@ static void sniffer_log_write_overflow(uint32_t lost_count, uint8_t magic, const
 }
 
 
+static void sniffer_log_write_bad_length(uint32_t bad_len){
+    // A length-fifo entry this large cannot be a real message on this
+    // bus (see SNIFFER_MAX_PLAUSIBLE_MSG_LEN): a logic error somewhere
+    // upstream, not expected in normal operation. Trusting it would
+    // misalign every subsequent slice offset into databuf for the rest
+    // of this batch, silently writing garbage into the log instead of
+    // real messages. Discard the rest of this batch instead; the
+    // remaining entries are simply picked up on the next iteration.
+    sniffer_log_write_event(SNIFFER_LOG_MAGIC_BAD_LENGTH, bad_len);
+    fprintf(stderr,
+            "[PRUserial485 sniffer] implausible length-fifo entry (%u bytes), "
+            "discarding rest of this batch, exact loss (if any) unknown\n", bad_len);
+}
+
+
 static void sniffer_log_write_resync(uint32_t delta){
     // We know host_count was `delta` messages ahead of pru_count, which
     // should not be possible during normal operation, but not whether
@@ -436,6 +460,14 @@ static void *sniffer_capture_thread(void *arg){
         total_expected_bytes = 0;
         for(k = 0; k < new_count; k++){
             uint32_t len = sniffer_shram_read_length(host_count + k);
+            // Checked before the running total below, not after: a
+            // sufficiently large garbage len could otherwise overflow
+            // that addition and wrap back under the budget, defeating
+            // this check entirely.
+            if(len > SNIFFER_MAX_PLAUSIBLE_MSG_LEN){
+                sniffer_log_write_bad_length(len);
+                break;
+            }
             if(total_expected_bytes + len > SNIFFER_MAX_BATCH_BYTES){
                 break;
             }
@@ -447,9 +479,11 @@ static void *sniffer_capture_thread(void *arg){
         new_count = k;
 
         if(new_count == 0){
-            // A single message is larger than SNIFFER_MAX_BATCH_BYTES --
-            // not possible given the byte-ring's real capacity, but avoid
-            // spinning forever if it ever happens.
+            // Either a single message is larger than SNIFFER_MAX_BATCH_BYTES
+            // (not possible given the byte-ring's real capacity) or the
+            // very first entry this round had an implausible length
+            // (already reported above). Either way, avoid spinning
+            // forever if it ever happens.
             continue;
         }
 
