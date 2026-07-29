@@ -80,6 +80,15 @@ volatile uint8_t thread_control = 0;
 volatile uint32_t pru_pointer = 0, read_pointer = 0;
 volatile uint8_t receive_buffer[INCOMING_BUFF_SIZE];
 
+// --- Sniffer integration (see sniffer.c) -----------------------------------
+// Signaled by monitorRecvBuffer right after it copies new bytes into
+// receive_buffer, with sniffer_lenfifo_snapshot taken at that exact same
+// instant (both under `lock`), so a sniffer thread woken by this signal
+// never sees a length-FIFO count ahead of what recv_data_PRU() can
+// actually deliver.
+pthread_cond_t sniffer_data_ready = PTHREAD_COND_INITIALIZER;
+volatile uint32_t sniffer_lenfifo_snapshot = 0;
+
 
 // --- FeedForward config variables
 volatile int bytes_per_table = 0, max_points_per_table = 0;
@@ -570,6 +579,24 @@ uint8_t read_curve_block(){
 }
 
 
+// Reads SHRAM_OFFSET_LENFIFO_COUNT as 4 separate byte accesses rather
+// than one atomic 32-bit load, since prudata is just a byte-indexed
+// volatile array with no wider access guaranteed safe over this mapping.
+// That leaves a window where a preemption between two of those reads
+// lets the PRU's own 4-byte SBCO update of this same counter land in
+// the middle of the loop, producing a value built from a mix of pre-
+// and post-update bytes. Called from monitorRecvBuffer() with a
+// re-read-until-stable wrapper around it (see below) to catch that.
+static uint32_t read_lenfifo_count(void){
+    uint32_t lc = 0;
+    int b;
+    for(b=0; b<4; b++){
+        lc |= ((uint32_t)prudata[SHRAM_OFFSET_LENFIFO_COUNT + b]) << (8*b);
+    }
+    return lc;
+}
+
+
 void *monitorRecvBuffer(void *arg){
     // ----- Copia dos dados recebidos
     uint32_t pru_recv_pointer = SHRAM_OFFSET_READ + 3;
@@ -656,6 +683,32 @@ void *monitorRecvBuffer(void *arg){
                     os_recv_pointer = BUFF_RECV_START;
                 }
             }
+
+            // Sniffer integration: snapshot the length-FIFO counter at the
+            // exact instant these bytes become visible above, still under
+            // `lock`, then wake any waiting sniffer thread. See the comment
+            // by sniffer_data_ready's declaration for why this matters.
+            //
+            // Re-read until two consecutive reads agree: a genuine tear
+            // (see read_lenfifo_count()'s comment) essentially never
+            // reproduces the exact same wrong value twice in a row, so
+            // this catches it without needing PRU-side alignment changes.
+            // Bounded so a pathological case can't stall this loop:
+            // if it never stabilizes, the last read is used as-is.
+            {
+                uint32_t lc = read_lenfifo_count();
+                int attempt;
+                for(attempt = 0; attempt < 4; attempt++){
+                    uint32_t lc2 = read_lenfifo_count();
+                    if(lc2 == lc){
+                        break;
+                    }
+                    lc = lc2;
+                }
+                sniffer_lenfifo_snapshot = lc;
+            }
+            pthread_cond_broadcast(&sniffer_data_ready);
+
             pthread_mutex_unlock(&lock);
 
             // ----- Sinaliza mensagem antiga (somente apos copiar os dados,
@@ -689,7 +742,14 @@ int init_start_PRU(int baudrate, char mode){
 
 
     // ----- SHRAM - General Purpose = 0x00
-    for(i=0; i<100; i++)
+    // Extended to 104 (not just 100) so this also zeroes the sniffer's
+    // length-FIFO counter (SHRAM_OFFSET_LENFIFO_COUNT, 100..103): without
+    // that, a fresh open() could start the counter from a stale leftover
+    // value instead of 0, producing a bogus baseline mismatch the first
+    // time the sniffer runs. The ring itself (104 onward) needs no
+    // zeroing: nothing reads a ring slot until the counter says it's
+    // been written.
+    for(i=0; i<104; i++)
     prudata[i] = 0x00;
 
 

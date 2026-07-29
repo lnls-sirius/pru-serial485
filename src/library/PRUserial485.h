@@ -19,6 +19,7 @@ Date: October/2024
 #include <stdint.h>
 #include <unistd.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <prussdrv.h>
 #include <pruss_intc_mapping.h>
 
@@ -45,6 +46,9 @@ Date: October/2024
 #define ERR_FF_IDTYPE 10           // ff_configure
 #define STS_FF_ENABLED 1
 #define STS_FF_DISABLED 0
+#define ERR_SNIFFER_ALREADY_RUNNING 13  // PRUserial485_sniffer_start
+#define ERR_SNIFFER_LOG_OPEN 14         // PRUserial485_sniffer_start
+#define ERR_SNIFFER_THREAD_CREATE 16    // PRUserial485_sniffer_start
 
 
 
@@ -314,6 +318,63 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
  *
 */
 int recv_flush();
+
+
+
+/* Internal to PRUserial485, used by sniffer.c to synchronize with
+ * monitorRecvBuffer() without racing it. Not part of the public API,
+ * not meant to be used directly by callers of this library.
+ */
+extern pthread_mutex_t lock;
+extern pthread_cond_t sniffer_data_ready;
+extern volatile uint32_t sniffer_lenfifo_snapshot;
+
+
+
+/* SNIFFER - INICIO DA CAPTURA E LOG DE TRAFEGO
+ *
+ * SOMENTE MODO SLAVE. Pressupoe que init_start_PRU(baudrate, 'S') ja foi
+ * chamado com sucesso; esta funcao nao abre nem fecha a conexao com a
+ * PRU, apenas liga a captura/log sobre uma conexao Slave ja existente.
+ *
+ * ATENCAO: enquanto o sniffer estiver em execucao, nao chame recv_data_PRU()
+ * (PRUserial485_read()) a partir de outro lugar do mesmo processo: ambos
+ * consomem o mesmo ponteiro de leitura interno, e usar os dois ao mesmo
+ * tempo divide os dados recebidos entre os dois consumidores.
+ *
+ * ATENCAO: tambem nao chame PRUserial485_write() enquanto o sniffer
+ * estiver em execucao. O sniffer nunca transmite (e nao pode: ver
+ * sniffer.c), e reaproveita a regiao de "Sending Data" da shared RAM
+ * (normalmente usada por write_data_PRU) para seu length-FIFO interno
+ * enquanto ativo; chamar write() nesse meio tempo corromperia esse
+ * length-FIFO.
+ *
+ * --Parametro--
+ * log_dir: diretorio onde os arquivos de log rotativos serao criados.
+ * rotate_bytes: tamanho maximo (em bytes) de cada arquivo de log antes de
+ * rotacionar para um novo arquivo. Se 0, nunca rotaciona.
+ *
+ * --Retorno--
+ * OK
+ * ERR_SNIFFER_ALREADY_RUNNING : sniffer ja estava em execucao
+ * ERR_SNIFFER_LOG_OPEN        : falha ao abrir o arquivo de log
+ * ERR_SNIFFER_THREAD_CREATE   : falha ao criar a thread de captura
+ *
+*/
+int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes);
+
+
+
+/* SNIFFER - PARADA DA CAPTURA E LOG DE TRAFEGO
+ *
+ * Encerra a thread de captura de forma limpa (join) e fecha o arquivo de
+ * log atual. NAO fecha a conexao com a PRU: close_PRU() continua sendo
+ * uma chamada separada e explicita do usuario.
+ *
+ * Se o sniffer nao estiver em execucao, nao faz nada.
+ *
+*/
+void PRUserial485_sniffer_stop(void);
 
 
 #ifdef __cplusplus
