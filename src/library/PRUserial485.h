@@ -19,6 +19,7 @@ Date: October/2024
 #include <stdint.h>
 #include <unistd.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <prussdrv.h>
 #include <pruss_intc_mapping.h>
 
@@ -49,6 +50,18 @@ Date: October/2024
 // send_data_PRU: refused, this connection is in Passive mode ('P'),
 // which can never transmit (receive-only, structurally enforced)
 #define ERR_PASSIVE_MODE_NO_SEND 15
+
+// PRUserial485_sniffer_start
+#define ERR_SNIFFER_ALREADY_RUNNING 13
+
+// PRUserial485_sniffer_start
+#define ERR_SNIFFER_LOG_OPEN 14
+
+// PRUserial485_sniffer_start
+#define ERR_SNIFFER_THREAD_CREATE 16
+
+// PRUserial485_sniffer_start: connection is not open in Passive mode ('P')
+#define ERR_SNIFFER_NOT_PASSIVE_MODE 17
 
 
 
@@ -325,6 +338,72 @@ int recv_data_PRU(uint8_t *data, uint32_t *tamanho, uint32_t bytes2read);
  *
 */
 int recv_flush();
+
+
+
+/* Internal to PRUserial485, used by sniffer.c to synchronize with
+ * monitorRecvBuffer() without racing it. Not part of the public API,
+ * not meant to be used directly by callers of this library.
+ */
+extern pthread_mutex_t lock;
+extern pthread_cond_t sniffer_data_ready;
+extern volatile uint32_t sniffer_lenfifo_snapshot;
+
+
+
+/* SNIFFER - INICIO DA CAPTURA E LOG DE TRAFEGO
+ *
+ * SOMENTE MODO PASSIVE. Pressupoe que init_start_PRU(baudrate, 'P') ja foi
+ * chamado com sucesso; esta funcao nao abre nem fecha a conexao com a
+ * PRU, apenas liga a captura/log sobre uma conexao Passive ja existente.
+ * Retorna ERR_SNIFFER_NOT_PASSIVE_MODE (sem tocar em nenhum estado) se a
+ * conexao nao estiver em modo 'P'.
+ *
+ * Modo Passive ('P') recebe exatamente como o modo Slave ('S'), mas jamais
+ * transmite: isso e garantido estruturalmente no firmware e reforcado em
+ * send_data_PRU() (ver ERR_PASSIVE_MODE_NO_SEND), nao apenas por
+ * convencao. Por isso o modo Slave tradicional ('S'), usado por
+ * dispositivos que respondem como escravos em um barramento real,
+ * permanece totalmente inalterado e alheio ao sniffer.
+ *
+ * ATENCAO: enquanto o sniffer estiver em execucao, nao chame recv_data_PRU()
+ * (PRUserial485_read()) a partir de outro lugar do mesmo processo: ambos
+ * consomem o mesmo ponteiro de leitura interno, e usar os dois ao mesmo
+ * tempo divide os dados recebidos entre os dois consumidores.
+ *
+ * PRUserial485_write() em uma conexao Passive sempre retorna
+ * ERR_PASSIVE_MODE_NO_SEND, antes de tocar em qualquer shared RAM: o
+ * sniffer reaproveita a regiao de "Sending Data" (normalmente usada por
+ * write_data_PRU) para sua length-FIFO interna, e essa protecao e
+ * estrutural, nao dependente do sniffer estar rodando.
+ *
+ * --Parametro--
+ * log_dir: diretorio onde os arquivos de log rotativos serao criados.
+ * rotate_bytes: tamanho maximo (em bytes) de cada arquivo de log antes de
+ * rotacionar para um novo arquivo. Se 0, nunca rotaciona.
+ *
+ * --Retorno--
+ * OK
+ * ERR_SNIFFER_NOT_PASSIVE_MODE : conexao nao esta em modo Passive ('P')
+ * ERR_SNIFFER_ALREADY_RUNNING  : sniffer ja estava em execucao
+ * ERR_SNIFFER_LOG_OPEN         : falha ao abrir o arquivo de log
+ * ERR_SNIFFER_THREAD_CREATE    : falha ao criar a thread de captura
+ *
+*/
+int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes);
+
+
+
+/* SNIFFER - PARADA DA CAPTURA E LOG DE TRAFEGO
+ *
+ * Encerra a thread de captura de forma limpa (join) e fecha o arquivo de
+ * log atual. NAO fecha a conexao com a PRU: close_PRU() continua sendo
+ * uma chamada separada e explicita do usuario.
+ *
+ * Se o sniffer nao estiver em execucao, nao faz nada.
+ *
+*/
+void PRUserial485_sniffer_stop(void);
 
 
 #ifdef __cplusplus
