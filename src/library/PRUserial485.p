@@ -18,6 +18,15 @@
 #define OFFSET_SHRAM_MUTEX_PRU2_REQUEST     48
 #define OFFSET_SHRAM_MUTEX_ARM_REQUEST      49
 
+// Sniffer (Slave mode): on-chip length-FIFO counter and ring, both in
+// shared RAM (reusing the otherwise-idle "Sending Data" region, since
+// the sniffer never transmits). Keep in sync with shram_mapping.h.
+#define OFFSET_SHRAM_LENFIFO_COUNT          100
+#define OFFSET_SHRAM_LENFIFO_RING           104
+
+// LENFIFO_DEPTH(2048) - 1
+#define LENFIFO_DEPTH_MASK                  0x7FF
+
 #define MUTEX_485_FREE                      0
 #define MUTEX_485_PRU2_ACQUIRED             1
 #define MUTEX_485_ARM_ACQUIRED              2
@@ -716,7 +725,6 @@ PROCEDURE_START_SLAVE:
     ZERO        &RECV_POINTER, 4
     ADD         RECV_POINTER, OFFSET_SHRAM_WRITE, 3             // I: ponteiro para início dos dados -  SHRAM[0x1800 + 3]
 
-
 // ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
     SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena tamanho nos primeiros bytes
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -872,6 +880,42 @@ STORE_LAST16_MEMORY_SLAVE:
 // ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
     SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
     SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// ~~~~~ SNIFFER: append this message's length to the on-chip length-FIFO ~
+// I still holds the exact total byte length of the message just
+// completed (always well under the 65535 that fits in this ring's
+// 2-byte entries: the on-chip receive ring itself, the tightest buffer
+// in this whole path, is only 4093 bytes). Runs unconditionally, before
+// the sync-broadcast check below (which does not modify I unless it
+// matches, and only reads it).
+// J is free here (the STORE_LAST16_MEMORY_SLAVE loop above only exits
+// once J reaches 0), so it's used as scratch to hold the mask, since
+// AND's immediate operand is limited to 0-255 and LENFIFO_DEPTH_MASK is
+// not. DDR_POINTER (r12) is reused purely as a scratch register here,
+// same as before; nothing in this block touches DDR.
+
+    // Reads the current (monotonic) number of messages that have been recorded so far
+    LBCO        DDR_POINTER, SHRAM_BASE, OFFSET_SHRAM_LENFIFO_COUNT, 4
+
+    // Computes the ring-buffer index using a mask
+    MOV         J, LENFIFO_DEPTH_MASK
+    AND         K, DDR_POINTER, J
+
+    // The ring buffer is 2 bytes/entry, so the index in bytes is 2 * K
+    LSL         K, K, 1
+    ADD         K, K, OFFSET_SHRAM_LENFIFO_RING
+
+    // The actual insertion of the length I into the FIFO
+    SBCO        I, SHRAM_BASE, K, 2
+
+    // Advances the global/monotonic count. Note that this monotonic counter is
+    // NOT the ring index. It keeps increasing indefinitely. The mask is what 
+    // converts it to a ring buffer position. 
+    ADD         DDR_POINTER, DDR_POINTER, 1
+
+    // Publishes the updated count back to shared RAM.
+    SBCO        DDR_POINTER, SHRAM_BASE, OFFSET_SHRAM_LENFIFO_COUNT, 4
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 

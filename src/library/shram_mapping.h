@@ -53,11 +53,19 @@ Date: October/2024
  * 85           Sync Mode: Sync mode config - 0x51 (Single sequence & Intercalated messages), 0x5E (Single sequence & messages at End of curve)
  *                                            0xC1 (Continuous sequence & Intercalated messages), 0xCE (Continuous sequence & messages at End of curve)
  *                                            0x5B (Single Sequence, Single Broadcast Function command)
- * 
- * 
- * 100..103     Sending Data: Data size
- * 104..6143    Sending Data: Data
- * 
+ *
+ * 100..6143    Sending Data: Data size (100..103) and Data (104..6143). Only
+ *              valid while PRUserial485_write() may be called. While the
+ *              Slave-mode sniffer is running (which never transmits), this
+ *              region is reused instead for the sniffer's on-chip
+ *              length-FIFO (see PRUserial485.p):
+ *                100..103   monotonic message counter
+ *                104..4199  ring of 2048 entries, 2 bytes each (message
+ *                           length in bytes; real traffic is far smaller
+ *                           than the 65535 a 2-byte field can express)
+ *              Do not call PRUserial485_write() while the sniffer is
+ *              running: it would corrupt this region.
+ *
  * 6144..6147   Receiving Data: Data size
  * 6148..10999  Receiving Data: Data
  * 
@@ -94,6 +102,22 @@ Date: October/2024
 
 #define SHRAM_OFFSET_WRITE                  100
 #define SHRAM_OFFSET_READ                   0x1800
+
+// Slave mode sniffer: on-chip length-FIFO, reusing the "Sending Data"
+// region (see the map above), never touched while the sniffer runs
+// since it never transmits.
+
+// monotonic message counter (4 bytes, aligned)
+#define SHRAM_OFFSET_LENFIFO_COUNT          100
+
+// ring base
+#define SHRAM_OFFSET_LENFIFO_RING           104
+
+// ring depth (power of two, entries)
+#define LENFIFO_DEPTH                       2048
+
+// bytes/entry (message length; see map comment above)
+#define LENFIFO_ENTRY_BYTES                  2
 
 
 #define SHRAM_OFFSET_MUTEX_PRU2_ARM         34
