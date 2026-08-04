@@ -293,14 +293,6 @@ static void sniffer_log_write_raw(const uint8_t *buf, size_t len) {
     }
 
     sniffer_log_bytes_written += len;
-
-    if(sniffer_rotate_bytes > 0 && sniffer_log_bytes_written >= sniffer_rotate_bytes) {
-        // always flush fully before rotating away from this fd
-        fsync(sniffer_log_fd);
-        close(sniffer_log_fd);
-        sniffer_log_fd = -1;
-        sniffer_log_open_new_file();
-    }
 }
 
 
@@ -314,6 +306,24 @@ static void sniffer_log_maybe_fsync(void) {
             fsync(sniffer_log_fd);
         }
         sniffer_log_records_since_fsync = 0;
+    }
+}
+
+
+// Call once per logical record, after every sniffer_log_write_raw() call
+// for it has completed, never in the middle of one. A record's header
+// and payload are written as two separate sniffer_log_write_raw() calls;
+// rotating between them would strand the header (with no payload) at the
+// end of the old file and dump the orphaned payload, unprefixed, at the
+// start of the new one, breaking log framing without losing any actual
+// data. Checking only here, at record boundaries, keeps that impossible.
+static void sniffer_log_maybe_rotate(void) {
+    if(sniffer_rotate_bytes > 0 && sniffer_log_bytes_written >= sniffer_rotate_bytes) {
+        // always flush fully before rotating away from this fd
+        fsync(sniffer_log_fd);
+        close(sniffer_log_fd);
+        sniffer_log_fd = -1;
+        sniffer_log_open_new_file();
     }
 }
 
@@ -337,6 +347,7 @@ static void sniffer_log_write_message(const uint8_t *payload, uint32_t length) {
         sniffer_log_write_raw(payload, length);
     }
     sniffer_log_maybe_fsync();
+    sniffer_log_maybe_rotate();
 }
 
 
@@ -358,6 +369,7 @@ static void sniffer_log_write_event(uint8_t magic, uint32_t count) {
 
     sniffer_log_write_raw(header, sizeof(header));
     sniffer_log_maybe_fsync();
+    sniffer_log_maybe_rotate();
 }
 
 
