@@ -36,6 +36,7 @@ value and is never affected by any of this.
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +63,31 @@ value and is never affected by any of this.
 // traffic is flowing, the thread wakes immediately on each signal.
 // 100 ms
 #define SNIFFER_WAIT_TIMEOUT_NS    100000000L
+
+// The on-chip byte-ring the PRU drains into is small; if this thread
+// gets starved under normal SCHED_OTHER contention (another process
+// hogging the CPU, disk I/O from log rotation, etc.) for long enough,
+// the ring wraps before it's read and messages are genuinely lost
+// (see the byte-ring-underrun overflow path below). Real-time priority
+// keeps this thread's scheduling independent of whatever else is
+// running on the host. Modest by SCHED_RR standards (max is 99) so it
+// still yields to anything with a genuine higher-priority realtime need.
+//
+// SCHED_RR, not SCHED_FIFO, and the same priority as PRUserial485.c's
+// monitorRecvBuffer thread (MONITOR_THREAD_RT_PRIORITY), not lower: a
+// strictly lower SCHED_FIFO priority here was tried and reverted after
+// testing on real hardware, since it let monitorRecvBuffer starve this
+// thread completely for as long as it had continuous traffic to
+// process, losing tens of thousands of messages in one burst. SCHED_RR
+// at equal priority is what actually fixes that: the kernel round-robins
+// fairly between two threads at the same priority on its own. An
+// explicit sched_yield() after every message on the monitorRecvBuffer
+// side was also tried and reverted, since real traffic on this bus
+// arrives in bursts of tens of thousands of messages/sec, and forcing a
+// context switch on every single one at that rate cost far more than it
+// saved (measured on real hardware: ~90% of traffic lost to periodic
+// length-FIFO overflows, worse than not having this fix at all).
+#define SNIFFER_THREAD_RT_PRIORITY  20
 
 // Each event type gets its own magic byte, so a reader never has to
 // decode a reason out of the count field: classification stays correct
@@ -544,13 +570,33 @@ int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t 
     }
 
     sniffer_running = 1;
-    if(pthread_create(&sniffer_thread_id, NULL, sniffer_capture_thread, NULL) != 0) {
-        sniffer_running = 0;
-        close(sniffer_log_fd);
-        sniffer_log_fd = -1;
-        return ERR_SNIFFER_THREAD_CREATE;
+
+    pthread_attr_t attr;
+    struct sched_param param;
+    pthread_attr_init(&attr);
+    pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+    pthread_attr_setschedpolicy(&attr, SCHED_RR);
+    param.sched_priority = SNIFFER_THREAD_RT_PRIORITY;
+    pthread_attr_setschedparam(&attr, &param);
+
+    if(pthread_create(&sniffer_thread_id, &attr, sniffer_capture_thread, NULL) != 0) {
+        // Most likely cause: no CAP_SYS_NICE (not running as root).
+        // Fall back to default scheduling rather than refusing to
+        // capture at all, since losing the priority boost is better than
+        // losing the sniffer.
+        fprintf(stderr, "[PRUserial485 sniffer] could not start capture thread with "
+                "SCHED_RR priority %d (missing CAP_SYS_NICE?), falling back to "
+                "default scheduling\n", SNIFFER_THREAD_RT_PRIORITY);
+        if(pthread_create(&sniffer_thread_id, NULL, sniffer_capture_thread, NULL) != 0) {
+            pthread_attr_destroy(&attr);
+            sniffer_running = 0;
+            close(sniffer_log_fd);
+            sniffer_log_fd = -1;
+            return ERR_SNIFFER_THREAD_CREATE;
+        }
     }
 
+    pthread_attr_destroy(&attr);
     return OK;
 }
 
