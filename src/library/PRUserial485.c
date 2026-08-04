@@ -902,6 +902,17 @@ int init_start_PRU(int baudrate, char mode){
         pthread_attr_t attr;
         struct sched_param param;
 
+        // NOTE: this thread contains unbounded busy-wait spin loops
+        // (waiting for SHRAM_OFFSET_DATA_STATUS / pru_recv_pointer to
+        // change). Under plain SCHED_OTHER those are harmless, since the
+        // kernel timeslices this thread against everything else on the
+        // system regardless of what it's doing. Do NOT put this thread on
+        // SCHED_FIFO without first reworking those spin loops to block or
+        // yield: a real-time thread that never voluntarily gives up the
+        // CPU is not timesliced against lower/equal-priority threads at
+        // all, and on the BBB's single Cortex-A8 core that was enough to
+        // starve the sniffer thread completely (0-byte logs) and make the
+        // whole board barely responsive, confirmed on real hardware.
         pthread_attr_init (&attr);
         pthread_attr_getschedparam (&attr, &param);
         (param.sched_priority)++;
