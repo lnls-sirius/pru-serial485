@@ -19,7 +19,9 @@ Date: October/2024
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <pthread.h>
+#include <sched.h>
 #include <signal.h>
+#include <time.h>
 
 
 // --- PRU mapping
@@ -58,6 +60,52 @@ Date: October/2024
 #define MUTEX_485_FREE                      0
 #define MUTEX_485_PRU2_ACQUIRED             1
 #define MUTEX_485_ARM_ACQUIRED              2
+
+
+// monitorRecvBuffer() drains the PRU's on-chip byte-ring (BUFF_RECV_START..
+// BUFF_RECV_STOP below, only ~4KB) into the much larger host-side
+// receive_buffer, so it's the thread genuinely responsible for that ring
+// not overflowing under load. It shares real-time priority with the
+// sniffer's own capture thread (see sniffer.c) rather than outranking it.
+// Two things were tried and reverted here after testing on real hardware:
+//
+// - A strictly higher SCHED_FIFO priority than the sniffer thread. Under
+//   SCHED_FIFO a higher-priority runnable thread always wins the CPU over
+//   a lower-priority one for as long as it has work to do, and during a
+//   real burst of traffic that let this thread starve the sniffer thread
+//   completely for several seconds at a time, losing tens of thousands
+//   of messages in one shot.
+// - SCHED_RR at equal priority plus an explicit sched_yield() after every
+//   message. Real traffic on this bus arrives in dense bursts (tens of
+//   microseconds between messages, tens of thousands of messages/sec),
+//   and forcing a context switch on every single one of them at that
+//   rate produced far more overhead than it saved: measured on real
+//   hardware, ~90% of traffic ended up lost to periodic length-FIFO
+//   overflows, worse than not having real-time scheduling here at all.
+//
+// SCHED_RR at equal priority alone (no manual yield) is the current
+// approach: the kernel already round-robins fairly between two threads
+// at the same priority on its own, at its own timeslice granularity,
+// without our code forcing a switch on every message.
+//
+// Separately, this thread waits for the PRU by busy-spinning on shared-
+// RAM flags rather than blocking (the interrupt it already waited for
+// has normally just fired, so these conditions are expected to become
+// true within a handful of iterations). That's harmless under plain
+// SCHED_OTHER, since the kernel timeslices this thread against
+// everything else regardless of what it's doing. It is NOT harmless
+// under a real-time policy: a thread that never voluntarily blocks is
+// never preempted by anything of equal or lower priority, so an
+// unbounded spin could starve the rest of the system indefinitely.
+// MONITOR_SPIN_BOUND caps each spin before it falls back to a brief real
+// sleep (see monitor_spin_backoff() below), which actually blocks this
+// thread and hands the CPU back regardless of priority. Confirmed
+// necessary on real hardware: without a bound, real-time priority here
+// starved the sniffer thread completely (0-byte logs, reproduced 10/10)
+// and made the whole board barely responsive.
+#define MONITOR_THREAD_RT_PRIORITY          20
+#define MONITOR_SPIN_BOUND                  10000
+#define MONITOR_SPIN_BACKOFF_NS             100000L   // 100 us
 
 
 // --- Curves for Sync Mode
@@ -597,6 +645,22 @@ static uint32_t read_lenfifo_count(void){
 }
 
 
+// Called once a bounded spin (MONITOR_SPIN_BOUND iterations) has failed
+// to see the awaited condition become true. A real sleep, not
+// sched_yield(): under a real-time policy, yielding only reorders this
+// thread among others at the *same* priority, so it would not actually
+// give a lower-priority thread (or the rest of the system) a chance to
+// run while this thread is still runnable. Blocking on nanosleep() takes
+// this thread out of the run queue entirely for the duration, regardless
+// of policy or priority.
+static void monitor_spin_backoff(void){
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = MONITOR_SPIN_BACKOFF_NS;
+    nanosleep(&ts, NULL);
+}
+
+
 void *monitorRecvBuffer(void *arg){
     // ----- Copia dos dados recebidos
     uint32_t pru_recv_pointer = SHRAM_OFFSET_READ + 3;
@@ -611,10 +675,17 @@ void *monitorRecvBuffer(void *arg){
         tamanho = 0;
 
         if(prudata[SHRAM_OFFSET_485_MODE] == 'M'){
+            uint32_t spins;
+
             prussdrv_pru_wait_event(PRU_EVTOUT_0);
             prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
             // ----- Nova mensagem recebida !
+            spins = 0;
             while(prudata[SHRAM_OFFSET_DATA_STATUS] != NEW_INCOMING_DATA){
+                if(++spins >= MONITOR_SPIN_BOUND){
+                    monitor_spin_backoff();
+                    spins = 0;
+                }
             }
 
             // ----- Copia dos dados recebidos
@@ -636,12 +707,19 @@ void *monitorRecvBuffer(void *arg){
         }
 
         else{
+            uint32_t spins;
+
             prussdrv_pru_wait_event(PRU_EVTOUT_0);
             prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
             // ----- Nova mensagem recebida !
             // Aguarda dado salvo na SHRAM
+            spins = 0;
             while(prudata[SHRAM_OFFSET_DATA_STATUS] != NEW_INCOMING_DATA){
+                if(++spins >= MONITOR_SPIN_BOUND){
+                    monitor_spin_backoff();
+                    spins = 0;
+                }
             }
 
             // Le ponteiro da PRU
@@ -650,7 +728,12 @@ void *monitorRecvBuffer(void *arg){
                 pru_recv_pointer += prudata[SHRAM_OFFSET_READ+idx] << idx*8;
             }
 
+            spins = 0;
             while(pru_recv_pointer == os_recv_pointer){
+                if(++spins >= MONITOR_SPIN_BOUND){
+                    monitor_spin_backoff();
+                    spins = 0;
+                }
                 // Atualiza pru_recv_pointer
                 pru_recv_pointer = 0;
                 for(idx=0; idx<4; idx++){
@@ -714,7 +797,6 @@ void *monitorRecvBuffer(void *arg){
             // ----- Sinaliza mensagem antiga (somente apos copiar os dados,
             // para nao liberar o buffer da PRU antes da copia terminar)
             prudata[SHRAM_OFFSET_DATA_STATUS] = OLD_DATA;
-
         }
     }
 }
@@ -902,25 +984,25 @@ int init_start_PRU(int baudrate, char mode){
         pthread_attr_t attr;
         struct sched_param param;
 
-        // NOTE: this thread contains unbounded busy-wait spin loops
-        // (waiting for SHRAM_OFFSET_DATA_STATUS / pru_recv_pointer to
-        // change). Under plain SCHED_OTHER those are harmless, since the
-        // kernel timeslices this thread against everything else on the
-        // system regardless of what it's doing. Do NOT put this thread on
-        // SCHED_FIFO without first reworking those spin loops to block or
-        // yield: a real-time thread that never voluntarily gives up the
-        // CPU is not timesliced against lower/equal-priority threads at
-        // all, and on the BBB's single Cortex-A8 core that was enough to
-        // starve the sniffer thread completely (0-byte logs) and make the
-        // whole board barely responsive, confirmed on real hardware.
         pthread_attr_init (&attr);
-        pthread_attr_getschedparam (&attr, &param);
-        (param.sched_priority)++;
+        pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+        pthread_attr_setschedpolicy(&attr, SCHED_RR);
+        param.sched_priority = MONITOR_THREAD_RT_PRIORITY;
         pthread_attr_setschedparam (&attr, &param);
 
         thread_control = 1;
         pthread_t thread_id;
-        pthread_create(&thread_id, &attr, monitorRecvBuffer, NULL);
+        if(pthread_create(&thread_id, &attr, monitorRecvBuffer, NULL) != 0){
+            // Most likely cause: no CAP_SYS_NICE (not running as root).
+            // Fall back to default scheduling rather than not receiving
+            // data at all, since losing the priority boost is better
+            // than losing the connection.
+            fprintf(stderr, "[PRUserial485] could not start receive-buffer thread with "
+                    "SCHED_RR priority %d (missing CAP_SYS_NICE?), falling back to "
+                    "default scheduling\n", MONITOR_THREAD_RT_PRIORITY);
+            pthread_create(&thread_id, NULL, monitorRecvBuffer, NULL);
+        }
+        pthread_attr_destroy(&attr);
         tid = thread_id;
     }
     return OK;
