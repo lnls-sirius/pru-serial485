@@ -316,10 +316,14 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 PyObject* pru_sniffer_start(PyObject* self, PyObject *args)
 {
     const char *log_dir;
-    long rotate_bytes;
-    long max_total_bytes = 0;
+    unsigned long rotate_bytes;
+    unsigned long max_total_bytes = 0;
 
-    if (!PyArg_ParseTuple(args, "sl|l", &log_dir, &rotate_bytes, &max_total_bytes))
+    // "k"/"unsigned long" rather than "l"/"long": rotate_bytes and
+    // max_total_bytes are byte counts, never negative, and size_t here is
+    // already an unsigned 32-bit type on this platform (~4.29GB). Parsing
+    // into a signed long needlessly capped callers at ~2.147GB.
+    if (!PyArg_ParseTuple(args, "sk|k", &log_dir, &rotate_bytes, &max_total_bytes))
     {
         return NULL;
     }
