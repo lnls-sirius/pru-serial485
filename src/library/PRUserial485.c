@@ -863,7 +863,7 @@ int init_start_PRU(int baudrate, char mode){
     // transmit (see PRUserial485.p and send_data_PRU() below).
     if(prudata[SHRAM_OFFSET_485_MODE]=='S' || prudata[SHRAM_OFFSET_485_MODE]=='P'){
         prudata[SHRAM_OFFSET_DATA_STATUS]=OLD_DATA;
-        prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x02;
+        prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x10;
     }
 
     // Endereco de Hardware
