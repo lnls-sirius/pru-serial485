@@ -861,7 +861,7 @@ int init_start_PRU(int baudrate, char mode){
     // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
     if(prudata[SHRAM_OFFSET_485_MODE]=='S'){
         prudata[SHRAM_OFFSET_DATA_STATUS]=OLD_DATA;
-        prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x02;
+        prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x10;
     }
 
     // Endereco de Hardware
