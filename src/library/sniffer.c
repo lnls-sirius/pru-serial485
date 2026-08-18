@@ -97,17 +97,18 @@ this file never calls close_PRU() and never sends anything on the bus.
 #define SNIFFER_LOG_VERSION                 0x01
 #define SNIFFER_LOG_HEADER_BYTES            18
 
-// fsync() is a synchronous storage barrier. On SD/eMMC it can
-// occasionally stall for tens of milliseconds (wear-leveling, GC
-// pauses). Calling it per record let a single slow fsync stall the
-// capture thread long enough for the 100KB host-side ring to wrap and
-// overwrite unread data, i.e. the durability mechanism was itself
-// causing the loss it was meant to guard against. write() alone is
-// already safe against a process crash (kill -9, segfault), since the
-// page cache survives that; only a kernel panic or power loss needs
-// fsync, so batching it trades a small, bounded exposure to *those*
-// specific failure modes for dramatically better throughput.
-#define SNIFFER_FSYNC_EVERY_N_RECORDS  32
+// fsync() is a synchronous storage barrier. On SD/eMMC it can occasionally
+// stall for tens of milliseconds (wear-leveling, GC pauses); on a
+// FAT-formatted USB stick it's worse and more variable still, since every
+// fsync also has to flush FAT-table metadata (no journal). Calling it per
+// record let a single slow fsync stall the capture thread long enough for the
+// 100KB host-side ring to wrap and overwrite unread data, i.e. the durability
+// mechanism was itself causing the loss it was meant to guard against. write()
+// alone is already safe against a process crash (kill -9, segfault), since the
+// page cache survives that; only a kernel panic or power loss needs fsync, so
+// batching it trades a small, bounded exposure to those specific failure modes
+// for dramatically better throughput. 256 was validated on real hardware.
+#define SNIFFER_FSYNC_EVERY_N_RECORDS  256
 
 
 // --- Sniffer thread state ---
