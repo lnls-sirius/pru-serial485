@@ -18,7 +18,7 @@ Date: October/2024
 
 // ----- Shared RAM Mapping -----
 /* OFFSET   |   Reserved
- * 0            MAX3107 IC version (0x1A)    
+ * 0            MAX3107 IC version (0xA1, per datasheet RevID register)
  * 1            RS485 status: dados para enviar (0xFF) / dados para ler (0x00) / dados antigos (0x55)
  * 2            MAX3107: Baudrate (BRGCONFIG)
  * 3            MAX3107: Baudrate (DIVLSB)
@@ -54,6 +54,10 @@ Date: October/2024
  *                                            0xC1 (Continuous sequence & Intercalated messages), 0xCE (Continuous sequence & messages at End of curve)
  *                                            0x5B (Single Sequence, Single Broadcast Function command)
  *
+ * 94           DEBUG-ONLY: Slave-mode receive loop checkpoint marker (see
+ *              DEBUG_STATE_* in PRUserial485.p). Not part of the stable
+ *              interface; remove once the sniffer stall investigation is done.
+ *
  * 100..6143    Sending Data: Data size (100..103) and Data (104..6143). Only
  *              valid while PRUserial485_write() may be called. While the
  *              Slave-mode sniffer is running (which never transmits), this
@@ -87,6 +91,10 @@ Date: October/2024
 #define SHRAM_OFFSET_MAX3107_DIVMSB         4
 #define SHRAM_OFFSET_MAX3107_RXTIMEOUT      32
 #define SHRAM_OFFSET_DATA_STATUS            1
+
+// DEBUG-ONLY: see PRUserial485.p's DEBUG_STATE_* constants for the values
+// this holds. Remove once the sniffer stall investigation is done.
+#define SHRAM_OFFSET_DEBUG_STATE            94
 
 
 #define SHRAM_OFFSET_SYNC_STATUS              5

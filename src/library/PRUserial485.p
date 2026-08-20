@@ -27,6 +27,21 @@
 // LENFIFO_DEPTH(2048) - 1
 #define LENFIFO_DEPTH_MASK                  0x7FF
 
+// Debug-only: one-byte marker for the Slave-mode receive loop's current
+// checkpoint (see DEBUG_STATE_* below), so a stall can be localized from
+// the host by polling this offset instead of guessing. Same free gap in
+// shram_mapping.h as LENFIFO's neighbors (86..93 is FF range fields,
+// 100 is SHRAM_OFFSET_WRITE). Remove once the sniffer stall is found.
+#define OFFSET_SHRAM_DEBUG_STATE             94
+
+#define DEBUG_STATE_START_SLAVE              1  // loop top, re-arming MAX3107 interrupts
+#define DEBUG_STATE_WAIT_RECEIVED_SLAVE       2  // idle, waiting for first byte (or send-pending)
+#define DEBUG_STATE_GOT_FIRST_BYTE_SLAVE      3  // first byte seen, configuring RxTimeout IRQ
+#define DEBUG_STATE_RXLEVEL_AND_TIMEOUT_SLAVE 4  // mid-message, waiting for FIFO fill or RxTimeout
+#define DEBUG_STATE_STORE_LEFTBYTES_SLAVE     5  // message complete, finalizing length-fifo/DDR
+#define DEBUG_STATE_DATA_READY_SLAVE          6  // signaling ARM, about to loop back
+#define DEBUG_STATE_SEND_DATA_SLAVE           7  // UNEXPECTED for a sniffer connection: something called write()
+
 #define MUTEX_485_FREE                      0
 #define MUTEX_485_PRU2_ACQUIRED             1
 #define MUTEX_485_ARM_ACQUIRED              2
@@ -64,6 +79,7 @@
 #define OPERATION_MODE                  r15
 #define ENDERECO_HARDWARE               r14
 #define RECV_POINTER                    r13
+#define DEBUG_STATE                     r0                      // free register, debug-only (see OFFSET_SHRAM_DEBUG_STATE)
 
 
 #define UART_MODES_ADDRESS              0x89                    // UART_WRITE_END
@@ -732,6 +748,8 @@ PROCEDURE_START_SLAVE:
 
 START_SLAVE:
     NOP
+    MOV         DEBUG_STATE, DEBUG_STATE_START_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
 
  // ----- RECEBER DADOS ---------------------------------------------------------------------------
  RECEIVE_DATA_SLAVE:
@@ -755,6 +773,8 @@ START_SLAVE:
 
 // ~~~~~ Verifica recepcao de dados ~~~~~~~~
 WAIT_RECEIVED_SLAVE:
+    MOV         DEBUG_STATE, DEBUG_STATE_WAIT_RECEIVED_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
 
 // ----- Verifica se há algo para enviar -----
 // Prontos para serem enviados: SHRAM[1] = 0xFF
@@ -780,6 +800,8 @@ WAIT_RECEIVED_SLAVE:
     QBEQ        WAIT_RECEIVED_SLAVE, BUFFER_SPI_IN, 0
 
 GOT_FIRST_BYTE_SLAVE:
+    MOV         DEBUG_STATE, DEBUG_STATE_GOT_FIRST_BYTE_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -808,6 +830,8 @@ GOT_FIRST_BYTE_SLAVE:
 
 // Le RxLevel até ser >= 32 e verifica IRQ (RxTimeout). Se Timeout_FimMensagem, ARMAZENA BYTES RESTANTES
 RXLEVEL_AND_TIMEOUT_SLAVE:
+    MOV         DEBUG_STATE, DEBUG_STATE_RXLEVEL_AND_TIMEOUT_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
 
     QBBC        STORE_LEFTBYTES_SLAVE, IRQ                      // RxTimeout Interrupt. Fim de mensagem
 
@@ -847,6 +871,8 @@ STORE_16_MEMORY_SLAVE:
 
  // Armazena bytes restantes - Interrupcao RxTimeout
 STORE_LEFTBYTES_SLAVE:
+    MOV         DEBUG_STATE, DEBUG_STATE_STORE_LEFTBYTES_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
 
  // Le Rx FIFO Level
     CS_DOWN
@@ -977,6 +1003,8 @@ UPDATE_MSG_COUNTING:
 
 // ----- ENVIO DE DADOS - MODO SLAVE --------------------------------------------------------------
 SEND_DATA_SLAVE:
+    MOV         DEBUG_STATE, DEBUG_STATE_SEND_DATA_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
 
     CALL SEND_DATA_UART
 
@@ -992,6 +1020,8 @@ SEND_DATA_SLAVE:
 
 // ----- FINALIZACAO - Finaliza e aguarda por novo envio de dados  --------------------------------
 DATA_READY_SLAVE:
+    MOV         DEBUG_STATE, DEBUG_STATE_DATA_READY_SLAVE
+    SBCO        DEBUG_STATE, SHRAM_BASE, OFFSET_SHRAM_DEBUG_STATE, 1
     ZERO        &I, 4
 
     MOV         I, MENSAGEM_RECEBIDA_NOVA                       // Confirma Dados Recebidos prudata[1]=0x00
