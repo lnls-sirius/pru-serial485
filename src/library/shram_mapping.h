@@ -60,9 +60,18 @@ Date: October/2024
  *              region is reused instead for the sniffer's on-chip
  *              length-FIFO (see PRUserial485.p):
  *                100..103   monotonic message counter
- *                104..4199  ring of 2048 entries, 2 bytes each (message
- *                           length in bytes; real traffic is far smaller
- *                           than the 65535 a 2-byte field can express)
+ *                104..4199  ring of 2048 entries, 2 bytes each. Bits
+ *                           0..14 are the message length in bytes (real
+ *                           traffic is far smaller than the 32767 that
+ *                           leaves); bit 15 is a flag: set when the PRU's
+ *                           byte-count safety valve (FORCE_FLUSH_THRESHOLD
+ *                           in PRUserial485.p) forced a message boundary
+ *                           because RxTimeout never fired, i.e. this
+ *                           entry is a forced chunk boundary, not a real
+ *                           end-of-message. Clear for a genuine
+ *                           RxTimeout-terminated message. See sniffer.c,
+ *                           which reads and reports the two cases
+ *                           separately.
  *              Do not call PRUserial485_write() while the sniffer is
  *              running: it would corrupt this region.
  *
@@ -118,6 +127,16 @@ Date: October/2024
 
 // bytes/entry (message length; see map comment above)
 #define LENFIFO_ENTRY_BYTES                  2
+
+// Bit 15 of a length-FIFO entry: set when the PRU's byte-count safety
+// valve forced a message boundary (FORCE_FLUSH_THRESHOLD in
+// PRUserial485.p) rather than a real RxTimeout-detected end-of-message.
+// Must match LENFIFO_FORCED_FLUSH_FLAG in PRUserial485.p.
+#define LENFIFO_FORCED_FLUSH_FLAG            0x8000
+
+// Mask to recover just the real byte length from a length-FIFO entry,
+// discarding LENFIFO_FORCED_FLUSH_FLAG.
+#define LENFIFO_LENGTH_MASK                  0x7FFF
 
 
 #define SHRAM_OFFSET_MUTEX_PRU2_ARM         34

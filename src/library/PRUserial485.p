@@ -27,6 +27,26 @@
 // LENFIFO_DEPTH(2048) - 1
 #define LENFIFO_DEPTH_MASK                  0x7FF
 
+// Byte-count safety valve for Slave-mode message framing (see
+// STORE_16BYTES_SLAVE / FORCE_FLUSH_SLAVE below): RxTimeout is the
+// primary way a message boundary gets detected, but on a bus that never
+// goes idle long enough for RxTimeout to fire, that alone stalls
+// reception forever. If I (the running byte count) reaches this many
+// bytes without RxTimeout having fired first, a message boundary is
+// forced anyway. A real single message on this bus is ~20-22 bytes, so
+// this is comfortably above the common case (RxTimeout still wins
+// whenever the bus has any gap at all) and comfortably below both the
+// 4093-byte on-chip receive ring and the 15-bit range left in the
+// length-FIFO's 2-byte entries once bit 15 is reserved as the
+// forced-chunk flag (see FORCE_FLUSH_SLAVE).
+#define FORCE_FLUSH_THRESHOLD                512
+
+// Flag bit set in a length-FIFO entry to mark "forced chunk boundary,
+// not a real end-of-message" (see FORCE_FLUSH_SLAVE). Bit 15 of the
+// 2-byte entry; real message lengths and FORCE_FLUSH_THRESHOLD itself
+// never come remotely close to it.
+#define LENFIFO_FORCED_FLUSH_FLAG            0x8000
+
 #define MUTEX_485_FREE                      0
 #define MUTEX_485_PRU2_ACQUIRED             1
 #define MUTEX_485_ARM_ACQUIRED              2
@@ -841,6 +861,13 @@ STORE_16_MEMORY_SLAVE:
 
     //SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
 
+    // Byte-count safety valve: checked every 8 bytes, here, with CS
+    // already deasserted, never mid-SPI-burst. If the bus never goes
+    // silent long enough for RxTimeout to fire below, I would otherwise
+    // grow without bound instead of ever completing a message. J is
+    // free here (just finished as the 8-byte loop counter above).
+    MOV         J, FORCE_FLUSH_THRESHOLD
+    QBGE        FORCE_FLUSH_SLAVE, I, J
 
     JMP         RXLEVEL_AND_TIMEOUT_SLAVE
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -875,6 +902,29 @@ STORE_LAST16_MEMORY_SLAVE:
     QBNE        STORE_LAST16_MEMORY_SLAVE,J,0x00                // Se J == 0, termina loop
     CS_UP
 
+    // Real RxTimeout completion: falls straight through from the loop
+    // above. B is what actually gets published to the length-FIFO ring
+    // below; for a genuine completion it's just the true byte count I,
+    // with no flag bit set (contrast FORCE_FLUSH_SLAVE below, the other
+    // way to reach MESSAGE_COMPLETE_SLAVE).
+    MOV         B, I
+    JMP         MESSAGE_COMPLETE_SLAVE
+
+FORCE_FLUSH_SLAVE:
+    // Byte-count safety valve fired (jumped here directly from
+    // STORE_16BYTES_SLAVE's tail, bypassing STORE_LEFTBYTES_SLAVE /
+    // STORE_LAST16_MEMORY_SLAVE above: there is no <8-byte remainder to
+    // drain when cutting cleanly at an 8-byte boundary). Flag
+    // LENFIFO_FORCED_FLUSH_FLAG into B so the host can tell this was a
+    // forced chunk boundary, not a real end-of-message; see
+    // shram_mapping.h and sniffer.c. A (r16) is free here, used purely
+    // as scratch to hold the flag, since OR's immediate operand is
+    // limited to 0-255 and LENFIFO_FORCED_FLUSH_FLAG is not.
+    MOV         B, I
+    MOV         A, LENFIFO_FORCED_FLUSH_FLAG
+    OR          B, B, A
+
+MESSAGE_COMPLETE_SLAVE:
     SET         LED_IDLE
 
 // ~~~~~ RECV POINTER ATUALIZADO - VALOR DO ULTIMO BYTE ~~~~~~~~~~~~~~~~
@@ -883,17 +933,20 @@ STORE_LAST16_MEMORY_SLAVE:
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 // ~~~~~ SNIFFER: append this message's length to the on-chip length-FIFO ~
-// I still holds the exact total byte length of the message just
-// completed (always well under the 65535 that fits in this ring's
-// 2-byte entries: the on-chip receive ring itself, the tightest buffer
-// in this whole path, is only 4093 bytes). Runs unconditionally, before
-// the sync-broadcast check below (which does not modify I unless it
-// matches, and only reads it).
-// J is free here (the STORE_LAST16_MEMORY_SLAVE loop above only exits
-// once J reaches 0), so it's used as scratch to hold the mask, since
-// AND's immediate operand is limited to 0-255 and LENFIFO_DEPTH_MASK is
-// not. DDR_POINTER (r12) is reused purely as a scratch register here,
-// same as before; nothing in this block touches DDR.
+// B holds the value to publish: either the exact total byte length of
+// a genuinely completed message, or that same count with
+// LENFIFO_FORCED_FLUSH_FLAG set for a forced chunk boundary (see above).
+// Either way it's always well under the 15 bits available once that
+// flag bit is reserved (the on-chip receive ring itself, the tightest
+// buffer in this whole path, is only 4093 bytes; FORCE_FLUSH_THRESHOLD
+// is 512). Runs unconditionally, before the sync-broadcast check below
+// (which compares against I, the unflagged true byte count, and only
+// reads it).
+// J is free here (both paths into MESSAGE_COMPLETE_SLAVE finish with it
+// spent), so it's used as scratch to hold the mask, since AND's
+// immediate operand is limited to 0-255 and LENFIFO_DEPTH_MASK is not.
+// DDR_POINTER (r12) is reused purely as a scratch register here, same
+// as before; nothing in this block touches DDR.
 
     // monotonic count so far
     LBCO        DDR_POINTER, SHRAM_BASE, OFFSET_SHRAM_LENFIFO_COUNT, 4
@@ -904,8 +957,8 @@ STORE_LAST16_MEMORY_SLAVE:
     LSL         K, K, 1
     ADD         K, K, OFFSET_SHRAM_LENFIFO_RING
 
-    // write this message's length
-    SBCO        I, SHRAM_BASE, K, 2
+    // write this message's length (or forced-chunk length | flag)
+    SBCO        B, SHRAM_BASE, K, 2
     ADD         DDR_POINTER, DDR_POINTER, 1
 
     // publish new count
