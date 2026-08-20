@@ -47,6 +47,17 @@
 // never come remotely close to it.
 #define LENFIFO_FORCED_FLUSH_FLAG            0x8000
 
+// TEMPORARY DEBUG (see STORE_16BYTES_SLAVE below): live in-progress byte
+// count, published every 8 bytes while a message is still being
+// accumulated, unlike I itself which is normally only ever visible to
+// the host once a message completes. Placed just past the length-FIFO
+// ring (which ends at 104 + 2048*2 - 1 = 4199), still well inside the
+// "Sending Data" region already reserved for the sniffer while it runs.
+// Read-only: never touches SHRAM_OFFSET_DATA_STATUS or anything else
+// that could affect framing or transmission. Remove once the diagnosis
+// this is for is done.
+#define OFFSET_SHRAM_DEBUG_INPROGRESS_LEN    4200
+
 #define MUTEX_485_FREE                      0
 #define MUTEX_485_PRU2_ACQUIRED             1
 #define MUTEX_485_ARM_ACQUIRED              2
@@ -860,6 +871,11 @@ STORE_16_MEMORY_SLAVE:
     CS_UP
 
     //SBCO        RECV_POINTER, SHRAM_BASE, OFFSET_SHRAM_WRITE, 4 // Armazena RECV_POINTER nos primeiros bytes
+
+    // TEMPORARY DEBUG: publish the in-progress byte count every 8 bytes,
+    // so it's visible to the host while still accumulating instead of
+    // only at completion. See OFFSET_SHRAM_DEBUG_INPROGRESS_LEN above.
+    SBCO        I, SHRAM_BASE, OFFSET_SHRAM_DEBUG_INPROGRESS_LEN, 4
 
     // Byte-count safety valve: checked every 8 bytes, here, with CS
     // already deasserted, never mid-SPI-burst. If the bus never goes

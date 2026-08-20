@@ -138,6 +138,15 @@ Date: October/2024
 // discarding LENFIFO_FORCED_FLUSH_FLAG.
 #define LENFIFO_LENGTH_MASK                  0x7FFF
 
+// TEMPORARY DEBUG: live in-progress byte count (4 bytes), published by
+// STORE_16BYTES_SLAVE every 8 bytes while a message is still being
+// accumulated, unlike the length-FIFO above, which only ever becomes
+// visible once a message actually completes. Read-only diagnostic value;
+// doesn't affect framing or transmission. Must match
+// OFFSET_SHRAM_DEBUG_INPROGRESS_LEN in PRUserial485.p. Remove once the
+// diagnosis this is for is done.
+#define SHRAM_OFFSET_DEBUG_INPROGRESS_LEN    4200
+
 
 #define SHRAM_OFFSET_MUTEX_PRU2_ARM         34
 #define SHRAM_OFFSET_MUTEX_PRU2_REQUEST     48
