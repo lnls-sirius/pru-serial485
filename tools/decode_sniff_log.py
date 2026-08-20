@@ -16,9 +16,17 @@ Default mode dumps every record. Example:
     decoded in order:
     $ python3 decode_sniff_log.py sniff_logs/sniff_*.log
 
+A message record can also be a forced chunk boundary rather than a real
+message: PRUserial485.p's byte-count safety valve (FORCE_FLUSH_SLAVE)
+cuts a message boundary at FORCE_FLUSH_THRESHOLD bytes whenever the bus
+never goes idle long enough for RxTimeout to find a real one. Chunk
+records are real, byte-exact traffic, but NOT a real protocol message
+boundary, so they're marked distinctly rather than presented as if they
+were an ordinary message; see sniffer.c.
+
 --check mode scans without dumping every record, meant for a huge log
 file where reading a full dump isn't practical. It reports counts plus
-four independent problem signals: any overflow/loss event the sniffer
+five independent problem signals: any overflow/loss event the sniffer
 itself detected (broken down by which of the two overflow conditions
 produced it, since lost messages vs. lost bytes are different units and
 are never summed together), any baseline-resync event (host_count found
@@ -27,13 +35,17 @@ bad-length event (the capture thread found an implausible length-fifo
 entry, a logic error somewhere upstream and not expected in normal
 operation, and discarded the rest of that batch rather than risk
 misaligned slicing silently corrupting message framing; see sniffer.c),
-and any gap in the per-message `seq` counter that ISN'T
-explained by any of the above (a bug neither this script nor the
-sniffer anticipated, since seq only advances on a successful write, and
-none of the other event types skip a seq value). Example:
+any gap in the per-message `seq` counter that ISN'T explained by any of
+the above (a bug neither this script nor the sniffer anticipated, since
+seq only advances on a successful write, and none of the other event
+types skip a seq value), and a separate count of chunked messages (not
+a problem by itself, but a high count means the bus spent a lot of time
+genuinely gapless, worth knowing even on an otherwise clean capture).
+Example:
     $ python3 decode_sniff_log.py --check sniff_logs/sniff_*.log
     == sniff_logs/sniff_1785432000_123456789.log ==
       messages:              104213
+      chunked messages:      312
       overflow events:       0
         lost messages (length-fifo entries overwritten): 0
         lost bytes (byte-ring underrun):                 0
@@ -52,6 +64,7 @@ HEADER_SIZE = struct.calcsize(HEADER_FMT)
 # Each event type has its own magic byte, so classification never depends
 # on interpreting bits within the count field.
 MAGIC_MESSAGE = 0xA5
+MAGIC_MESSAGE_CHUNK = 0xA6
 MAGIC_OVERFLOW_ENTRIES = 0xEE
 MAGIC_OVERFLOW_BYTES = 0xEF
 MAGIC_RESYNC = 0xED
@@ -65,6 +78,11 @@ def iter_records(path):
     Stops (without raising) after yielding a "truncated" or "unknown"
     record, since nothing past that point can be trusted to parse
     correctly.
+
+    For "message" records, "chunked" is True when the PRU's byte-count
+    safety valve forced this boundary (FORCE_FLUSH_SLAVE in
+    PRUserial485.p) rather than a real RxTimeout completion: real,
+    byte-exact traffic, but not an actual protocol message boundary.
 
     For "overflow" records, "reason" is "entries" or "bytes".
     """
@@ -81,10 +99,11 @@ def iter_records(path):
         magic, _fmt_version, ts_ns, seq, length = struct.unpack_from(HEADER_FMT, data, i)
         i += HEADER_SIZE
 
-        if magic == MAGIC_MESSAGE:
+        if magic == MAGIC_MESSAGE or magic == MAGIC_MESSAGE_CHUNK:
             payload = data[i:i + length]
             i += length
-            yield {"kind": "message", "seq": seq, "ts_ns": ts_ns,
+            yield {"kind": "message", "chunked": magic == MAGIC_MESSAGE_CHUNK,
+                   "seq": seq, "ts_ns": ts_ns,
                    "length": length, "payload": payload, "offset": record_offset}
         elif magic == MAGIC_RESYNC:
             yield {"kind": "resync", "seq": seq, "ts_ns": ts_ns,
@@ -104,6 +123,7 @@ def iter_records(path):
 def decode_file(path):
     last_ts = None
     count = 0
+    chunk_count = 0
     for rec in iter_records(path):
         kind = rec["kind"]
 
@@ -125,8 +145,14 @@ def decode_file(path):
 
         if kind == "message":
             count += 1
-            print("[{:6d}] t={:.6f}{}  len={:4d}  {}".format(
-                rec["seq"], ts_s, gap_ms, rec["length"], rec["payload"].hex()))
+            if rec["chunked"]:
+                chunk_count += 1
+                print("[{:6d}] t={:.6f}{}  ** CHUNK (forced flush, not a real "
+                      "message boundary) **  len={:4d}  {}".format(
+                          rec["seq"], ts_s, gap_ms, rec["length"], rec["payload"].hex()))
+            else:
+                print("[{:6d}] t={:.6f}{}  len={:4d}  {}".format(
+                    rec["seq"], ts_s, gap_ms, rec["length"], rec["payload"].hex()))
         elif kind == "overflow":
             print("[{:6d}] t={:.6f}{}  ** OVERFLOW ({}) ** lost={}".format(
                 rec["seq"], ts_s, gap_ms, rec["reason"], rec["count"]))
@@ -139,11 +165,12 @@ def decode_file(path):
                   "(rest of that batch discarded, exact loss, if any, unknown)".format(
                       rec["seq"], ts_s, gap_ms, rec["bad_length"]))
 
-    print("{} messages decoded from {}".format(count, path))
+    print("{} messages decoded from {} ({} chunked)".format(count, path, chunk_count))
 
 
 def check_file(path):
     n_messages = 0
+    n_chunked_messages = 0
     n_overflow_events = 0
 
     # length-fifo entries overwritten before being read
@@ -209,8 +236,12 @@ def check_file(path):
             # between two message records' seq values.
             continue
 
-        # kind == "message"
+        # kind == "message" (real or chunked, both advance seq the same
+        # way, see sniffer_log_write_message_ex() in sniffer.c, so both
+        # participate in the gap check below identically)
         n_messages += 1
+        if rec["chunked"]:
+            n_chunked_messages += 1
         if expected_seq is not None and rec["seq"] != expected_seq:
             n_seq_gaps += 1
             problems.append(
@@ -223,6 +254,7 @@ def check_file(path):
 
     print("== {} ==".format(path))
     print("  messages:              {}".format(n_messages))
+    print("  chunked messages:      {}".format(n_chunked_messages))
     print("  overflow events:       {}".format(n_overflow_events))
     print("    lost messages (length-fifo entries overwritten): {}".format(n_lost_entries))
     print("    lost bytes (byte-ring underrun):                 {}".format(n_lost_bytes))
