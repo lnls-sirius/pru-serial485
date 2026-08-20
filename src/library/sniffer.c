@@ -90,11 +90,17 @@ this file never calls close_PRU() and never sends anything on the bus.
 // decode a reason out of the count field: classification stays correct
 // no matter how large a count value is.
 #define SNIFFER_LOG_MAGIC_MESSAGE           0xA5
+#define SNIFFER_LOG_MAGIC_MESSAGE_CHUNK     0xA6
 #define SNIFFER_LOG_MAGIC_OVERFLOW_ENTRIES  0xEE
 #define SNIFFER_LOG_MAGIC_OVERFLOW_BYTES    0xEF
 #define SNIFFER_LOG_MAGIC_RESYNC            0xED
 #define SNIFFER_LOG_MAGIC_BAD_LENGTH        0xEC
-#define SNIFFER_LOG_VERSION                 0x01
+
+// Bumped from 0x01: SNIFFER_LOG_MAGIC_MESSAGE_CHUNK is a new valid magic
+// byte a reader needs to know about (see PRUserial485.p's
+// FORCE_FLUSH_SLAVE / LENFIFO_FORCED_FLUSH_FLAG). Header layout itself
+// is unchanged.
+#define SNIFFER_LOG_VERSION                 0x02
 #define SNIFFER_LOG_HEADER_BYTES            18
 
 // fsync() is a synchronous storage barrier. On SD/eMMC it can occasionally
@@ -140,6 +146,12 @@ static unsigned sniffer_log_records_since_fsync = 0;
 // slot before it publishes the counter value that makes that slot
 // visible, so by the time this is called for a given ring_index, the
 // PRU is done writing it.
+//
+// Returns the raw 2-byte entry, unmasked: bits 0..14 are the real byte
+// length, bit 15 is LENFIFO_FORCED_FLUSH_FLAG (set when the PRU's
+// byte-count safety valve forced this boundary rather than a real
+// RxTimeout completion; see PRUserial485.p's FORCE_FLUSH_SLAVE).
+// Callers must mask before using the value as a length.
 static uint32_t sniffer_shram_read_length(uint32_t ring_index){
     uint16_t offset = SHRAM_OFFSET_LENFIFO_RING
                        + (uint16_t)((ring_index & (LENFIFO_DEPTH - 1)) * LENFIFO_ENTRY_BYTES);
@@ -328,7 +340,13 @@ static void sniffer_log_maybe_rotate(void){
 }
 
 
-static void sniffer_log_write_message(const uint8_t *payload, uint32_t length){
+// Shared by sniffer_log_write_message() (a genuine, RxTimeout-terminated
+// message) and sniffer_log_write_message_chunk() (a forced chunk
+// boundary from the byte-count safety valve, see PRUserial485.p's
+// FORCE_FLUSH_SLAVE): identical record shape, only the magic byte
+// differs, so a reader can always tell the two apart (see
+// decode_sniff_log.py) without the two paths duplicating this logic.
+static void sniffer_log_write_message_ex(uint8_t magic, const uint8_t *payload, uint32_t length){
     uint8_t header[SNIFFER_LOG_HEADER_BYTES];
     struct timespec ts;
     uint64_t ts_ns;
@@ -336,7 +354,7 @@ static void sniffer_log_write_message(const uint8_t *payload, uint32_t length){
     clock_gettime(CLOCK_REALTIME, &ts);
     ts_ns = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 
-    header[0] = SNIFFER_LOG_MAGIC_MESSAGE;
+    header[0] = magic;
     header[1] = SNIFFER_LOG_VERSION;
     write_u64_le(&header[2], ts_ns);
     write_u32_le(&header[10], sniffer_seq++);
@@ -348,6 +366,21 @@ static void sniffer_log_write_message(const uint8_t *payload, uint32_t length){
     }
     sniffer_log_maybe_fsync();
     sniffer_log_maybe_rotate();
+}
+
+
+static void sniffer_log_write_message(const uint8_t *payload, uint32_t length){
+    sniffer_log_write_message_ex(SNIFFER_LOG_MAGIC_MESSAGE, payload, length);
+}
+
+
+// A forced chunk boundary: real bytes off the wire, byte-exact, but cut
+// at FORCE_FLUSH_THRESHOLD rather than at an actual message boundary
+// (the bus never went idle long enough for RxTimeout to find one).
+// Logged distinctly rather than folded into sniffer_log_write_message()
+// so a reader never mistakes an arbitrary chunk for a real message.
+static void sniffer_log_write_message_chunk(const uint8_t *payload, uint32_t length){
+    sniffer_log_write_message_ex(SNIFFER_LOG_MAGIC_MESSAGE_CHUNK, payload, length);
 }
 
 
@@ -410,6 +443,7 @@ static void sniffer_log_write_resync(uint32_t delta){
 static void *sniffer_capture_thread(void *arg){
     uint8_t *databuf;
     uint32_t entry_lengths[LENFIFO_DEPTH];
+    uint8_t  entry_is_chunk[LENFIFO_DEPTH];
     uint32_t host_count;
 
     (void)arg;
@@ -498,11 +532,16 @@ static void *sniffer_capture_thread(void *arg){
 
         total_expected_bytes = 0;
         for(k = 0; k < new_count; k++){
-            uint32_t len = sniffer_shram_read_length(host_count + k);
+            uint32_t raw = sniffer_shram_read_length(host_count + k);
+            uint8_t  is_chunk = (raw & LENFIFO_FORCED_FLUSH_FLAG) != 0;
+            uint32_t len = raw & LENFIFO_LENGTH_MASK;
             // Checked before the running total below, not after: a
             // sufficiently large garbage len could otherwise overflow
             // that addition and wrap back under the budget, defeating
-            // this check entirely.
+            // this check entirely. Checked against the masked length,
+            // never the raw flagged value (LENFIFO_FORCED_FLUSH_FLAG
+            // alone would already push a legitimate small length past
+            // SNIFFER_MAX_PLAUSIBLE_MSG_LEN if left unmasked).
             if(len > SNIFFER_MAX_PLAUSIBLE_MSG_LEN){
                 sniffer_log_write_bad_length(len);
                 break;
@@ -511,6 +550,7 @@ static void *sniffer_capture_thread(void *arg){
                 break;
             }
             entry_lengths[k] = len;
+            entry_is_chunk[k] = is_chunk;
             total_expected_bytes += len;
         }
 
@@ -543,7 +583,11 @@ static void *sniffer_capture_thread(void *arg){
                 // ran out of real bytes for this message
                 break;
             }
-            sniffer_log_write_message(databuf + offset, entry_lengths[k]);
+            if(entry_is_chunk[k]){
+                sniffer_log_write_message_chunk(databuf + offset, entry_lengths[k]);
+            } else {
+                sniffer_log_write_message(databuf + offset, entry_lengths[k]);
+            }
             offset += entry_lengths[k];
         }
 
