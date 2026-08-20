@@ -875,7 +875,14 @@ STORE_16_MEMORY_SLAVE:
     // TEMPORARY DEBUG: publish the in-progress byte count every 8 bytes,
     // so it's visible to the host while still accumulating instead of
     // only at completion. See OFFSET_SHRAM_DEBUG_INPROGRESS_LEN above.
-    SBCO        I, SHRAM_BASE, OFFSET_SHRAM_DEBUG_INPROGRESS_LEN, 4
+    // SBCO's immediate offset field is limited the same way AND/OR's
+    // immediate operand is elsewhere in this file (see the length-FIFO
+    // ring's own K-register offset below for the established pattern):
+    // 4200 does not fit and would silently truncate onto a much smaller,
+    // wrong offset (4200 mod 256 = 104, landing right on the length-FIFO
+    // ring's first slot) if used directly. Route it through J instead.
+    MOV         J, OFFSET_SHRAM_DEBUG_INPROGRESS_LEN
+    SBCO        I, SHRAM_BASE, J, 4
 
     // Byte-count safety valve: checked every 8 bytes, here, with CS
     // already deasserted, never mid-SPI-burst. If the bus never goes
