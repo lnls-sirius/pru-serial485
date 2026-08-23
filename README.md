@@ -67,7 +67,7 @@ _**General Purpose**_
    * _baudrate:_  
    RS485 serial desired baudrate. Available: 9600, 14400, 19200, 38400, 57600, 115200 bps and 1, 6, 10, 12 Mbps
    * _mode:_  
-   "M" for master and "S" for slave mode.
+   "M" for master, "S" for slave mode, and "P" for passive mode (receive-only, can never transmit).
 
 
 - ```PRUserial485_address()```
@@ -96,6 +96,8 @@ _**General Purpose**_
    Returns only after response received (valid response, timeout or ignored)
   * _SLAVE MODE:_  
    Returns just after data completely sent.
+  * _PASSIVE MODE:_  
+   Always returns `ERR_PASSIVE_MODE_NO_SEND` immediately, without touching the bus. A passive-mode connection can never transmit; open in master or slave mode to send.
 
 
 - ```PRUserial485_read(uint32_t nbytes)```

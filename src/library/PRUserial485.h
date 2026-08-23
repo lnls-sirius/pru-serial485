@@ -46,6 +46,10 @@ Date: October/2024
 #define STS_FF_ENABLED 1
 #define STS_FF_DISABLED 0
 
+// send_data_PRU: refused, this connection is in Passive mode ('P'),
+// which can never transmit (receive-only, structurally enforced)
+#define ERR_PASSIVE_MODE_NO_SEND 15
+
 
 
 
@@ -238,7 +242,9 @@ uint8_t read_curve_block();
 /* INICIALIZACAO DA PRU
  * --Parametros--
  * baudrate: velocidade de comunicacao RS485
- * mode: modo de operacao. 'M' para master e 'S' para slave
+ * mode: modo de operacao. 'M' para master, 'S' para slave e 'P' para
+ * passive (somente recepcao, jamais transmite: ver send_data_PRU() e
+ * ERR_PASSIVE_MODE_NO_SEND abaixo)
  *
  * Velocidades disponiveis:
  * (1)     Mbps    |
@@ -273,7 +279,12 @@ int init_start_PRU(int baudrate, char mode);
  *
  * MODO SLAVE:
  * A funcao retorna OK apos o envio dos dados
- * 
+ *
+ * MODO PASSIVE:
+ * A funcao sempre retorna ERR_PASSIVE_MODE_NO_SEND, imediatamente, sem
+ * tocar em nenhuma shared RAM nem no barramento. Passive mode nunca
+ * transmite, por construcao.
+ *
 */
 int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms);
 

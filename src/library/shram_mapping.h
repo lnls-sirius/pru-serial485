@@ -31,7 +31,9 @@ Date: October/2024
  * 19
  * 20..23       Sync Mode: Tamanho total em bytes das quatro curvas
  * 24           Hardware: Board hardware address
- * 25           RS485: Master/Slave ('M'/'S')
+ * 25           RS485: Master/Slave/Passive ('M'/'S'/'P'). Passive receives
+ *              exactly like Slave but can never transmit (see
+ *              send_data_PRU() and PRUserial485.p).
  * 26..28       RS485: 1 Serial Byte length [ns]
  * 29..31       Sync Mode: Delay Sync-Normal command (x10ns)
  * 32           MAX3107: RXTIMEOUT

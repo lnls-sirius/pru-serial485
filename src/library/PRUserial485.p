@@ -200,12 +200,13 @@ START:
   SBCO          I,SHRAM_BASE,OFFSET_SHRAM_SYNC_OK,1
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-// ~~~~~ MASTER/SLAVE MODE ~~~~~~~~~~~~~~~~~
-    ZERO        &OPERATION_MODE, 4                              // Verifica se opera em modo Master ou Slave
-    LBCO        OPERATION_MODE, SHRAM_BASE, 25, 1               // OPERATION_MODE <- shram[25] ('M' ou 'S')
+// ~~~~~ MASTER/SLAVE/PASSIVE MODE ~~~~~~~~~
+    ZERO        &OPERATION_MODE, 4                              // Verifica se opera em modo Master, Slave ou Passive
+    LBCO        OPERATION_MODE, SHRAM_BASE, 25, 1               // OPERATION_MODE <- shram[25] ('M', 'S' ou 'P')
 
     QBEQ        PROCEDURE_START_MASTER, OPERATION_MODE, 0x4d    // 0x4D = 'M'
     QBEQ        PROCEDURE_START_SLAVE, OPERATION_MODE, 0x53     // 0x53 = 'S'
+    QBEQ        PROCEDURE_START_SLAVE, OPERATION_MODE, 0x50     // 0x50 = 'P' (Passive: same receive path as Slave, never transmits)
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
@@ -750,8 +751,15 @@ WAIT_RECEIVED_SLAVE:
 
 // ----- Verifica se há algo para enviar -----
 // Prontos para serem enviados: SHRAM[1] = 0xFF
+// Passive mode ('P') never transmits: skip this check entirely rather
+// than trust SHRAM[1] to never spuriously read 0xff. Defense in depth
+// alongside send_data_PRU()'s own mode check (PRUserial485.c): even if
+// that host-side guard were ever bypassed, a 'P'-mode connection still
+// cannot reach SEND_DATA_SLAVE at the firmware level.
+    QBEQ        SKIP_SEND_CHECK_SLAVE, OPERATION_MODE, 0x50      // 0x50 = 'P'
     LBCO        I, SHRAM_BASE, 1, 1                             // 0xFF : Dados a enviar
     QBEQ        SEND_DATA_SLAVE, I.b0, 0xff                     // 0x55 : Nada a enviar
+SKIP_SEND_CHECK_SLAVE:
 // -------------------------------------------
 
     // Interrupt fired, byte(s) arrived

@@ -693,8 +693,8 @@ int init_start_PRU(int baudrate, char mode){
     prudata[i] = 0x00;
 
 
-    // ----- MODO DE OPERACAO: Master/Slave
-    if(mode=='M' || mode=='S')
+    // ----- MODO DE OPERACAO: Master/Slave/Passive
+    if(mode=='M' || mode=='S' || mode=='P')
     prudata[SHRAM_OFFSET_485_MODE] = mode;
     else{
         // Modo nao existente
@@ -714,8 +714,11 @@ int init_start_PRU(int baudrate, char mode){
         prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x02;
     }
 
-    // ----- Inicializacao SLAVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
-    if(prudata[SHRAM_OFFSET_485_MODE]=='S'){
+    // ----- Inicializacao SLAVE/PASSIVE: nenhuma mensagem nova na serial e RxTimeOut = 18 bytes
+    // Passive mode ('P') reuses Slave mode's receive timing unchanged:
+    // it's the exact same firmware receive path, just gated to never
+    // transmit (see PRUserial485.p and send_data_PRU() below).
+    if(prudata[SHRAM_OFFSET_485_MODE]=='S' || prudata[SHRAM_OFFSET_485_MODE]=='P'){
         prudata[SHRAM_OFFSET_DATA_STATUS]=OLD_DATA;
         prudata[SHRAM_OFFSET_MAX3107_RXTIMEOUT] = 0x02;
     }
@@ -860,6 +863,13 @@ int send_data_PRU(uint8_t *data, uint32_t *tamanho, float timeout_ms){
 
     uint32_t timeout_instructions;
     float timeout_inst;
+
+    // Passive mode ('P') can never transmit: refuse immediately, before
+    // touching any shared RAM or the mutex. This is what makes Passive
+    // mode a genuine receive-only guarantee rather than a convention.
+    if(prudata[SHRAM_OFFSET_485_MODE] == 'P'){
+        return ERR_PASSIVE_MODE_NO_SEND;
+    }
 
     timeout_inst = timeout_ms*66600;
     timeout_instructions = (int)timeout_inst;
