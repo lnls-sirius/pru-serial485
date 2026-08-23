@@ -55,11 +55,23 @@ Date: October/2024
  * 85           Sync Mode: Sync mode config - 0x51 (Single sequence & Intercalated messages), 0x5E (Single sequence & messages at End of curve)
  *                                            0xC1 (Continuous sequence & Intercalated messages), 0xCE (Continuous sequence & messages at End of curve)
  *                                            0x5B (Single Sequence, Single Broadcast Function command)
- * 
- * 
- * 100..103     Sending Data: Data size
- * 104..6143    Sending Data: Data
- * 
+ *
+ * 100..6143    Sending Data: Data size (100..103) and Data (104..6143). Only
+ *              valid while PRUserial485_write() may be called (Master or
+ *              Slave mode). On a Passive-mode ('P') connection this region
+ *              is reused instead for an on-chip length-FIFO (see
+ *              PRUserial485.p):
+ *                100..103   monotonic message counter
+ *                104..4199  ring of 2048 entries, 2 bytes each (message
+ *                           length in bytes; real traffic is far smaller
+ *                           than the 65535 a 2-byte field can express)
+ *              This reuse is safe by construction: a Passive-mode
+ *              connection can never transmit (see offset 25 above), so
+ *              nothing ever writes real outgoing data on top of the
+ *              length-FIFO. Plain Slave mode ('S') never touches this
+ *              reuse at all: the length-FIFO append only runs when mode
+ *              is 'P'.
+ *
  * 6144..6147   Receiving Data: Data size
  * 6148..10999  Receiving Data: Data
  * 
@@ -96,6 +108,23 @@ Date: October/2024
 
 #define SHRAM_OFFSET_WRITE                  100
 #define SHRAM_OFFSET_READ                   0x1800
+
+// Passive mode ('P'): on-chip length-FIFO, reusing the "Sending Data"
+// region (see the map above). Safe because a Passive-mode connection
+// structurally can never transmit; plain Slave mode ('S') never runs
+// this append at all.
+
+// monotonic message counter (4 bytes, aligned)
+#define SHRAM_OFFSET_LENFIFO_COUNT          100
+
+// ring base
+#define SHRAM_OFFSET_LENFIFO_RING           104
+
+// ring depth (power of two, entries)
+#define LENFIFO_DEPTH                       2048
+
+// bytes/entry (message length; see map comment above)
+#define LENFIFO_ENTRY_BYTES                  2
 
 
 #define SHRAM_OFFSET_MUTEX_PRU2_ARM         34
