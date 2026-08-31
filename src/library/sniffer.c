@@ -26,6 +26,18 @@ immediately if this connection is in Passive mode. That guarantee covers
 every caller, not just this translation unit. Ordinary Slave mode, used
 elsewhere for a real device replying to a master, is a distinct mode
 value and is never affected by any of this.
+
+Two-thread pipeline, by design: sniffer_capture_thread() drains the
+PRU's on-chip byte-ring (only ~4KB) and never touches the log file or
+storage in any way; it only ever formats a record and hands it to a
+bounded in-memory queue (sniffer_queue_push_record()), dropping and
+counting rather than blocking if that queue is full. sniffer_writer_
+thread() is the only code that ever calls write()/fsync() on the log
+fd. This means a slow disk (fsync() stalling tens of ms on FAT/SD/eMMC,
+see SNIFFER_FSYNC_EVERY_N_RECORDS below) can now, at worst, cause a
+bounded, visible queue-overflow drop (SNIFFER_LOG_MAGIC_QUEUE_OVERFLOW)
+instead of starving PRU-ring draining and causing the much larger,
+unbounded byte-ring-underrun losses that starvation used to cause.
 */
 
 #include "PRUserial485.h"
@@ -97,18 +109,34 @@ value and is never affected by any of this.
 #define SNIFFER_LOG_MAGIC_OVERFLOW_BYTES    0xEF
 #define SNIFFER_LOG_MAGIC_RESYNC            0xED
 #define SNIFFER_LOG_MAGIC_BAD_LENGTH        0xEC
+#define SNIFFER_LOG_MAGIC_QUEUE_OVERFLOW    0xEB
 #define SNIFFER_LOG_VERSION                 0x01
 #define SNIFFER_LOG_HEADER_BYTES            18
 
 // fsync() is a synchronous storage barrier that can stall tens of ms on
-// SD/eMMC or FAT-formatted USB sticks. Fsyncing every record let one slow
-// stall wrap the 100KB host-side ring before it was read, the durability
-// mechanism causing the very loss it was meant to guard against. write()
-// alone already survives a process crash; only a kernel panic or power
-// loss needs fsync, so batching it trades a small, bounded exposure to
-// those for much better throughput. 256 was validated empirically in
-// sniffer tests.
+// SD/eMMC or FAT-formatted USB sticks. All fsync()s now happen on the
+// writer thread (see sniffer_writer_thread below), never on the capture
+// thread that drains the PRU's on-chip byte-ring, so a stall here can no
+// longer starve that ring the way it once could. Still batched rather
+// than done every record: write() alone already survives an ordinary
+// process crash, only a kernel panic or power loss needs fsync, so
+// batching it trades a small, bounded exposure to those for much better
+// throughput. 256 was validated empirically in sniffer tests.
 #define SNIFFER_FSYNC_EVERY_N_RECORDS  256
+
+// Bytes buffered between the capture thread (producer) and the writer
+// thread (consumer) that owns the log fd. Sized to comfortably absorb a
+// multi-ms to low-tens-of-ms fsync() stall at realistic bus data rates
+// without the capture thread ever having to wait for the writer: see
+// sniffer_queue_push_record's drop-on-full policy below. 8 MiB is
+// trivial memory on this hardware next to what it buys in stall
+// tolerance.
+#define SNIFFER_WRITER_QUEUE_BYTES  (8 * 1024 * 1024)
+
+// Largest single record the capture thread can ever produce (header +
+// the largest plausible message), so it can be built in a fixed-size
+// local buffer before being handed to the queue.
+#define SNIFFER_QUEUE_MAX_RECORD_BYTES  (SNIFFER_LOG_HEADER_BYTES + SNIFFER_MAX_PLAUSIBLE_MSG_LEN)
 
 
 // --- Sniffer thread state ---
@@ -128,8 +156,32 @@ static size_t sniffer_rotate_bytes = 0;
 
 // 0 = unlimited; total across all rotated files
 static size_t sniffer_max_total_bytes = 0;
-static uint32_t sniffer_seq = 0;
+
+// Only ever written by the capture thread, but also read by the writer
+// thread (sniffer_log_emit_queue_overflow) to annotate an event with the
+// current position in the message sequence; volatile so that read is
+// never cached stale across threads.
+static volatile uint32_t sniffer_seq = 0;
 static unsigned sniffer_log_records_since_fsync = 0;
+
+// --- Capture-to-writer queue state ---
+// Single-producer (capture thread), single-consumer (writer thread) byte
+// ring of complete, pre-formatted log records, each stored as a 4-byte
+// little-endian length prefix followed by that many record bytes. The
+// producer never blocks on this: sniffer_queue_push_record() drops the
+// whole record and counts it if there isn't room, rather than ever
+// letting a slow writer/disk delay PRU-ring draining. See this file's
+// top comment for the resulting guarantee.
+static uint8_t  sniffer_queue_buf[SNIFFER_WRITER_QUEUE_BYTES];
+static size_t   sniffer_queue_head = 0;
+static size_t   sniffer_queue_tail = 0;
+static size_t   sniffer_queue_used = 0;
+static uint32_t sniffer_queue_dropped_records = 0;
+static uint32_t sniffer_queue_dropped_bytes = 0;
+static pthread_mutex_t sniffer_queue_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  sniffer_queue_not_empty = PTHREAD_COND_INITIALIZER;
+static pthread_t       sniffer_writer_thread_id;
+static volatile uint8_t sniffer_writer_running = 0;
 
 
 // The length-FIFO ring lives on-chip (see shram_mapping.h), so reading
@@ -164,6 +216,69 @@ static void write_u64_le(uint8_t *buf, uint64_t v) {
     for(b = 0; b < 8; b++) {
         buf[b] = (uint8_t)(v >> (8 * b));
     }
+}
+
+
+// Copies len bytes into the ring at sniffer_queue_tail, wrapping as
+// needed, and advances tail/used. Caller must hold sniffer_queue_lock
+// and must already have verified len bytes of room exist.
+static void sniffer_queue_put_locked(const uint8_t *data, size_t len) {
+    size_t first = SNIFFER_WRITER_QUEUE_BYTES - sniffer_queue_tail;
+    if(first > len) {
+        first = len;
+    }
+    memcpy(sniffer_queue_buf + sniffer_queue_tail, data, first);
+    if(len > first) {
+        memcpy(sniffer_queue_buf, data + first, len - first);
+    }
+    sniffer_queue_tail = (sniffer_queue_tail + len) % SNIFFER_WRITER_QUEUE_BYTES;
+    sniffer_queue_used += len;
+}
+
+
+// Copies len bytes out of the ring from sniffer_queue_head, wrapping as
+// needed, and advances head/used. Caller must hold sniffer_queue_lock
+// and must already have verified len bytes are actually queued.
+static void sniffer_queue_get_locked(uint8_t *out, size_t len) {
+    size_t first = SNIFFER_WRITER_QUEUE_BYTES - sniffer_queue_head;
+    if(first > len) {
+        first = len;
+    }
+    memcpy(out, sniffer_queue_buf + sniffer_queue_head, first);
+    if(len > first) {
+        memcpy(out + first, sniffer_queue_buf, len - first);
+    }
+    sniffer_queue_head = (sniffer_queue_head + len) % SNIFFER_WRITER_QUEUE_BYTES;
+    sniffer_queue_used -= len;
+}
+
+
+// Hands one already-formatted, complete log record to the writer thread.
+// Never blocks: if the queue doesn't have room, the record is dropped
+// and counted (sniffer_queue_dropped_records/_bytes) instead, so a slow
+// writer/disk can never delay the caller. The writer thread reports
+// accumulated drops as a SNIFFER_LOG_MAGIC_QUEUE_OVERFLOW event the next
+// time it has room (sniffer_log_emit_queue_overflow). Returns nonzero if
+// the record was actually queued.
+static int sniffer_queue_push_record(const uint8_t *rec, uint32_t rec_len) {
+    uint8_t len_prefix[4];
+    size_t needed = 4 + (size_t)rec_len;
+    int pushed;
+
+    pthread_mutex_lock(&sniffer_queue_lock);
+    if(sniffer_queue_used + needed > SNIFFER_WRITER_QUEUE_BYTES) {
+        sniffer_queue_dropped_records++;
+        sniffer_queue_dropped_bytes += rec_len;
+        pushed = 0;
+    } else {
+        write_u32_le(len_prefix, rec_len);
+        sniffer_queue_put_locked(len_prefix, sizeof(len_prefix));
+        sniffer_queue_put_locked(rec, rec_len);
+        pthread_cond_signal(&sniffer_queue_not_empty);
+        pushed = 1;
+    }
+    pthread_mutex_unlock(&sniffer_queue_lock);
+    return pushed;
 }
 
 
@@ -328,48 +443,87 @@ static void sniffer_log_maybe_rotate(void) {
 }
 
 
+// Builds the record locally and hands it to the writer queue rather than
+// writing it directly (see this file's top comment): sniffer_seq is only
+// actually consumed (incremented) if the record is accepted by the
+// queue, so a message dropped here for lack of queue room never leaves
+// a gap in the seq values that DO make it into the log - it simply never
+// allocates one. The drop itself is still visible, via the aggregate
+// byte/record counts sniffer_log_emit_queue_overflow() reports.
 static void sniffer_log_write_message(const uint8_t *payload, uint32_t length) {
-    uint8_t header[SNIFFER_LOG_HEADER_BYTES];
+    uint8_t rec[SNIFFER_QUEUE_MAX_RECORD_BYTES];
     struct timespec ts;
     uint64_t ts_ns;
 
     clock_gettime(CLOCK_REALTIME, &ts);
     ts_ns = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 
-    header[0] = SNIFFER_LOG_MAGIC_MESSAGE;
-    header[1] = SNIFFER_LOG_VERSION;
-    write_u64_le(&header[2], ts_ns);
-    write_u32_le(&header[10], sniffer_seq++);
-    write_u32_le(&header[14], length);
-
-    sniffer_log_write_raw(header, sizeof(header));
+    rec[0] = SNIFFER_LOG_MAGIC_MESSAGE;
+    rec[1] = SNIFFER_LOG_VERSION;
+    write_u64_le(&rec[2], ts_ns);
+    write_u32_le(&rec[10], sniffer_seq);
+    write_u32_le(&rec[14], length);
     if(length > 0) {
-        sniffer_log_write_raw(payload, length);
+        memcpy(rec + SNIFFER_LOG_HEADER_BYTES, payload, length);
     }
-    sniffer_log_maybe_fsync();
-    sniffer_log_maybe_rotate();
+
+    if(sniffer_queue_push_record(rec, SNIFFER_LOG_HEADER_BYTES + length)) {
+        sniffer_seq++;
+    }
 }
 
 
+// Builds an event record and hands it to the writer queue. count uses
+// the current, not-yet-consumed sniffer_seq (ties the event to the next
+// real message's seq) - this never touches sniffer_seq itself, so an
+// event dropped for lack of queue room is folded into the same
+// aggregate drop counters as a dropped message.
 static void sniffer_log_write_event(uint8_t magic, uint32_t count) {
-    uint8_t header[SNIFFER_LOG_HEADER_BYTES];
+    uint8_t rec[SNIFFER_LOG_HEADER_BYTES];
     struct timespec ts;
     uint64_t ts_ns;
 
     clock_gettime(CLOCK_REALTIME, &ts);
     ts_ns = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 
-    header[0] = magic;
-    header[1] = SNIFFER_LOG_VERSION;
-    write_u64_le(&header[2], ts_ns);
+    rec[0] = magic;
+    rec[1] = SNIFFER_LOG_VERSION;
+    write_u64_le(&rec[2], ts_ns);
+    write_u32_le(&rec[10], sniffer_seq);
+    write_u32_le(&rec[14], count);
 
-    // ties event to the next real message's seq
-    write_u32_le(&header[10], sniffer_seq);
-    write_u32_le(&header[14], count);
+    sniffer_queue_push_record(rec, sizeof(rec));
+}
 
-    sniffer_log_write_raw(header, sizeof(header));
+
+// Writer-thread-only: reports accumulated writer-queue drops as a log
+// event, exactly like sniffer_log_write_message()/_event() do for their
+// own record types, except this one is written directly (this thread
+// already owns the fd and isn't going through its own queue) and its
+// count is a byte count of dropped *record* bytes (message and/or event
+// records alike), not payload bytes, since a drop here can hit either.
+static void sniffer_log_emit_queue_overflow(uint32_t dropped_records, uint32_t dropped_bytes) {
+    uint8_t rec[SNIFFER_LOG_HEADER_BYTES];
+    struct timespec ts;
+    uint64_t ts_ns;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts_ns = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+
+    rec[0] = SNIFFER_LOG_MAGIC_QUEUE_OVERFLOW;
+    rec[1] = SNIFFER_LOG_VERSION;
+    write_u64_le(&rec[2], ts_ns);
+    write_u32_le(&rec[10], sniffer_seq);
+    write_u32_le(&rec[14], dropped_bytes);
+
+    sniffer_log_write_raw(rec, sizeof(rec));
     sniffer_log_maybe_fsync();
     sniffer_log_maybe_rotate();
+
+    fprintf(stderr,
+            "[PRUserial485 sniffer] writer queue overflow: %u record(s) / %u byte(s) "
+            "dropped before reaching disk (writer thread could not keep up)\n",
+            dropped_records, dropped_bytes);
 }
 
 
@@ -404,6 +558,78 @@ static void sniffer_log_write_resync(uint32_t delta) {
     fprintf(stderr,
             "[PRUserial485 sniffer] baseline resync: host_count was %u ahead of "
             "pru_count, resynced, exact loss (if any) unknown\n", delta);
+}
+
+
+// Sole owner of sniffer_log_fd once running: pops one complete record at
+// a time off the queue (a fast, lock-held memcpy only, no I/O under the
+// lock) and only then does the actual write()/fsync()/rotate() work,
+// with the lock released. This is what keeps a slow disk from ever
+// being able to delay sniffer_capture_thread(): the two threads only
+// ever interact through the brief, bounded queue operations above.
+//
+// Runs at default (non-realtime) scheduling, deliberately: unlike the
+// capture thread, nothing here has a hard latency requirement anymore
+// (that guarantee now lives in the queue's drop-on-full policy), so
+// there is no reason for it to compete for the same limited real-time
+// budget as the capture and monitorRecvBuffer threads.
+static void *sniffer_writer_thread(void *arg) {
+    uint8_t rec_buf[SNIFFER_QUEUE_MAX_RECORD_BYTES];
+
+    (void)arg;
+
+    for(;;) {
+        uint32_t rec_len = 0;
+        uint32_t dropped_records = 0;
+        uint32_t dropped_bytes = 0;
+        int have_record = 0;
+
+        pthread_mutex_lock(&sniffer_queue_lock);
+        while(sniffer_queue_used == 0 && sniffer_writer_running) {
+            struct timespec deadline;
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            deadline.tv_nsec += SNIFFER_WAIT_TIMEOUT_NS;
+            if(deadline.tv_nsec >= 1000000000L) {
+                deadline.tv_sec += deadline.tv_nsec / 1000000000L;
+                deadline.tv_nsec %= 1000000000L;
+            }
+            pthread_cond_timedwait(&sniffer_queue_not_empty, &sniffer_queue_lock, &deadline);
+        }
+
+        dropped_records = sniffer_queue_dropped_records;
+        dropped_bytes = sniffer_queue_dropped_bytes;
+        sniffer_queue_dropped_records = 0;
+        sniffer_queue_dropped_bytes = 0;
+
+        if(sniffer_queue_used > 0) {
+            uint8_t len_prefix[4];
+            sniffer_queue_get_locked(len_prefix, sizeof(len_prefix));
+            rec_len = (uint32_t)len_prefix[0] | ((uint32_t)len_prefix[1] << 8)
+                      | ((uint32_t)len_prefix[2] << 16) | ((uint32_t)len_prefix[3] << 24);
+            sniffer_queue_get_locked(rec_buf, rec_len);
+            have_record = 1;
+        }
+        pthread_mutex_unlock(&sniffer_queue_lock);
+
+        // Emitted after unlocking: this itself does file I/O, and must
+        // never happen while other threads might be waiting on the lock
+        // just to push/pop, not to touch the disk.
+        if(dropped_records > 0) {
+            sniffer_log_emit_queue_overflow(dropped_records, dropped_bytes);
+        }
+        if(have_record) {
+            sniffer_log_write_raw(rec_buf, rec_len);
+            sniffer_log_maybe_fsync();
+            sniffer_log_maybe_rotate();
+        }
+
+        if(!have_record && !sniffer_writer_running) {
+            // Queue confirmed empty and told to stop: fully drained.
+            break;
+        }
+    }
+
+    return NULL;
 }
 
 
@@ -577,8 +803,27 @@ int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t 
     sniffer_seq = 0;
     sniffer_write_failed = 0;
 
+    // Fresh queue for this session: a previous session always drains to
+    // empty on stop (see PRUserial485_sniffer_stop()), but reset
+    // explicitly rather than relying on that.
+    sniffer_queue_head = 0;
+    sniffer_queue_tail = 0;
+    sniffer_queue_used = 0;
+    sniffer_queue_dropped_records = 0;
+    sniffer_queue_dropped_bytes = 0;
+
     if(sniffer_log_open_new_file() != 0) {
         return ERR_SNIFFER_LOG_OPEN;
+    }
+
+    // Start the writer before the capture thread, so the queue always
+    // has a consumer from the moment traffic can start arriving.
+    sniffer_writer_running = 1;
+    if(pthread_create(&sniffer_writer_thread_id, NULL, sniffer_writer_thread, NULL) != 0) {
+        sniffer_writer_running = 0;
+        close(sniffer_log_fd);
+        sniffer_log_fd = -1;
+        return ERR_SNIFFER_THREAD_CREATE;
     }
 
     sniffer_running = 1;
@@ -602,6 +847,13 @@ int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t 
         if(pthread_create(&sniffer_thread_id, NULL, sniffer_capture_thread, NULL) != 0) {
             pthread_attr_destroy(&attr);
             sniffer_running = 0;
+
+            sniffer_writer_running = 0;
+            pthread_mutex_lock(&sniffer_queue_lock);
+            pthread_cond_broadcast(&sniffer_queue_not_empty);
+            pthread_mutex_unlock(&sniffer_queue_lock);
+            pthread_join(sniffer_writer_thread_id, NULL);
+
             close(sniffer_log_fd);
             sniffer_log_fd = -1;
             return ERR_SNIFFER_THREAD_CREATE;
@@ -620,6 +872,15 @@ void PRUserial485_sniffer_stop(void) {
 
     sniffer_running = 0;
     pthread_join(sniffer_thread_id, NULL);
+
+    // Capture thread is done producing; let the writer thread drain
+    // whatever's still queued before stopping it too, so a clean stop
+    // never loses anything that was already accepted into the queue.
+    sniffer_writer_running = 0;
+    pthread_mutex_lock(&sniffer_queue_lock);
+    pthread_cond_broadcast(&sniffer_queue_not_empty);
+    pthread_mutex_unlock(&sniffer_queue_lock);
+    pthread_join(sniffer_writer_thread_id, NULL);
 
     if(sniffer_log_fd >= 0) {
         // flush whatever's pending from a partial batch

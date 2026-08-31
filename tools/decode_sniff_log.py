@@ -20,7 +20,7 @@ Default mode dumps every record. Example:
 
 --check mode scans without dumping every record, meant for a huge log
 file where reading a full dump isn't practical. It reports counts plus
-four independent problem signals: any overflow/loss event the sniffer
+five independent problem signals: any overflow/loss event the sniffer
 itself detected (broken down by which of the two overflow conditions
 produced it, since lost messages vs. lost bytes are different units and
 are never summed together), any baseline-resync event (host_count found
@@ -29,10 +29,14 @@ bad-length event (the capture thread found an implausible length-fifo
 entry, a logic error somewhere upstream and not expected in normal
 operation, and discarded the rest of that batch rather than risk
 misaligned slicing silently corrupting message framing; see sniffer.c),
-and any gap in the per-message `seq` counter that ISN'T
-explained by any of the above (a bug neither this script nor the
-sniffer anticipated, since seq only advances on a successful write, and
-none of the other event types skip a seq value). Example:
+any writer-queue-overflow event (the capture thread's own record was
+formed correctly but the in-memory queue to the disk-writer thread was
+full, e.g. because storage couldn't keep up with a sustained burst, so
+it was dropped before ever reaching sniffer_seq; see sniffer.c), and any
+gap in the per-message `seq` counter that ISN'T explained by any of the
+above (a bug neither this script nor the sniffer anticipated, since seq
+only advances on a successful write, and none of the other event types
+skip a seq value). Example:
     $ python3 decode_sniff_log.py --check sniff_logs/sniff_*.log
     == sniff_logs/sniff_1785432000_123456789.log ==
       messages:              104213
@@ -41,6 +45,8 @@ none of the other event types skip a seq value). Example:
         lost bytes (byte-ring underrun):                 0
       baseline resync events: 0
       bad-length events:      0
+      writer queue overflow events: 0
+        record bytes dropped before reaching disk: 0
       unexplained gaps:      0
       no problems found
 
@@ -187,17 +193,22 @@ MAGIC_OVERFLOW_ENTRIES = 0xEE
 MAGIC_OVERFLOW_BYTES = 0xEF
 MAGIC_RESYNC = 0xED
 MAGIC_BAD_LENGTH = 0xEC
+MAGIC_QUEUE_OVERFLOW = 0xEB
 
 
 def iter_records(path):
     """Yield one dict per record in path, in file order.
 
-    kind is "message", "overflow", "resync", "truncated", or "unknown".
-    Stops (without raising) after yielding a "truncated" or "unknown"
-    record, since nothing past that point can be trusted to parse
-    correctly.
+    kind is "message", "overflow", "resync", "bad_length",
+    "queue_overflow", "truncated", or "unknown". Stops (without raising)
+    after yielding a "truncated" or "unknown" record, since nothing past
+    that point can be trusted to parse correctly.
 
-    For "overflow" records, "reason" is "entries" or "bytes".
+    For "overflow" records, "reason" is "entries" or "bytes". For
+    "queue_overflow" records, "dropped_bytes" is a count of raw record
+    bytes (message and/or event records alike) dropped before reaching
+    disk; it never affects "seq" continuity, since a dropped message
+    never consumes a seq value in the first place (see sniffer.c).
     """
     with open(path, "rb") as f:
         data = f.read()
@@ -227,6 +238,9 @@ def iter_records(path):
             reason = "entries" if magic == MAGIC_OVERFLOW_ENTRIES else "bytes"
             yield {"kind": "overflow", "seq": seq, "ts_ns": ts_ns,
                    "count": length, "reason": reason, "offset": record_offset}
+        elif magic == MAGIC_QUEUE_OVERFLOW:
+            yield {"kind": "queue_overflow", "seq": seq, "ts_ns": ts_ns,
+                   "dropped_bytes": length, "offset": record_offset}
         else:
             yield {"kind": "unknown", "magic": magic, "offset": record_offset}
             return
@@ -411,6 +425,10 @@ def decode_file(path):
             print("[{:6d}] t={:.6f}{}  ** IMPLAUSIBLE LENGTH ** value={} "
                   "(rest of that batch discarded, exact loss, if any, unknown)".format(
                       rec["seq"], ts_s, gap_ms, rec["bad_length"]))
+        elif kind == "queue_overflow":
+            print("[{:6d}] t={:.6f}{}  ** WRITER QUEUE OVERFLOW ** "
+                  "dropped_bytes={} (disk couldn't keep up, see sniffer.c)".format(
+                      rec["seq"], ts_s, gap_ms, rec["dropped_bytes"]))
 
     print("{} messages decoded from {}".format(count, path))
 
@@ -469,6 +487,10 @@ def dump_bsmp(path):
             print("[{:6d}] t={:.6f}{}  ** IMPLAUSIBLE LENGTH ** value={} "
                   "(rest of that batch discarded, exact loss, if any, unknown)".format(
                       rec["seq"], ts_s, gap_ms, rec["bad_length"]))
+        elif kind == "queue_overflow":
+            print("[{:6d}] t={:.6f}{}  ** WRITER QUEUE OVERFLOW ** "
+                  "dropped_bytes={} (disk couldn't keep up, see sniffer.c)".format(
+                      rec["seq"], ts_s, gap_ms, rec["dropped_bytes"]))
 
     print("{} messages / {} bsmp frame(s) decoded from {}{}".format(
         n_messages, n_frames, path,
@@ -554,6 +576,11 @@ def dump_bsmp_resync(path, garbage_hex_cap=BSMP_RESYNC_GARBAGE_HEX_CAP, command_
         elif kind == "bad_length":
             print("-- IMPLAUSIBLE LENGTH at seq {}: value={}, byte stream breaks here --".format(
                 rec["seq"], rec["bad_length"]))
+        elif kind == "queue_overflow":
+            print("-- WRITER QUEUE OVERFLOW reported near seq {}: dropped_bytes={}, "
+                  "byte stream breaks somewhere before here (exact point unknown, "
+                  "drops are only reported once the writer catches up) --".format(
+                      rec["seq"], rec["dropped_bytes"]))
         elif kind == "truncated":
             print("  ...{} trailing bytes, incomplete record, stopping".format(
                 rec["trailing_bytes"]))
@@ -585,6 +612,12 @@ def check_file(path):
 
     # implausible length-fifo entry, batch discarded
     n_bad_length_events = 0
+
+    # writer thread's in-memory queue was full, record(s) dropped before
+    # reaching disk
+    n_queue_overflow_events = 0
+    n_queue_overflow_bytes = 0
+
     n_seq_gaps = 0
     expected_seq = None
     problems = []
@@ -637,6 +670,20 @@ def check_file(path):
             # between two message records' seq values.
             continue
 
+        if kind == "queue_overflow":
+            n_queue_overflow_events += 1
+            n_queue_overflow_bytes += rec["dropped_bytes"]
+            problems.append(
+                "writer queue overflow at offset {} (dropped_bytes={}): the "
+                "writer thread's in-memory queue was full, so record(s) were "
+                "dropped before reaching disk; storage likely can't keep up "
+                "with sustained traffic, see sniffer.c".format(
+                    rec["offset"], rec["dropped_bytes"]))
+            # Also does NOT touch expected_seq: a dropped message never
+            # allocates a seq value in the first place (see sniffer.c), so
+            # this can never legitimately explain a gap either.
+            continue
+
         # kind == "message"
         n_messages += 1
         if expected_seq is not None and rec["seq"] != expected_seq:
@@ -656,6 +703,8 @@ def check_file(path):
     print("    lost bytes (byte-ring underrun):                 {}".format(n_lost_bytes))
     print("  baseline resync events: {}".format(n_resync_events))
     print("  bad-length events:      {}".format(n_bad_length_events))
+    print("  writer queue overflow events: {}".format(n_queue_overflow_events))
+    print("    record bytes dropped before reaching disk: {}".format(n_queue_overflow_bytes))
     print("  unexplained gaps:      {}".format(n_seq_gaps))
     if problems:
         print("  PROBLEMS FOUND:")
