@@ -311,24 +311,33 @@ static PyObject* pru_version(PyObject* self, PyObject *args)
 
 // ------------------------------------------------------------------------------------------------
 // int PRUserial485_sniffer_start(str log_dir, int rotate_bytes, int max_total_bytes=0)
-// -> int PRUserial485_sniffer_start(const char*, size_t, size_t)
+// -> int PRUserial485_sniffer_start(const char*, size_t, uint64_t)
 // ------------------------------------------------------------------------------------------------
 PyObject* pru_sniffer_start(PyObject* self, PyObject *args)
 {
     const char *log_dir;
     unsigned long rotate_bytes;
-    unsigned long max_total_bytes = 0;
+    unsigned long long max_total_bytes = 0;
 
-    // "k"/"unsigned long" rather than "l"/"long": rotate_bytes and
-    // max_total_bytes are byte counts, never negative, and size_t here is
-    // already an unsigned 32-bit type on this platform (~4.29GB). Parsing
-    // into a signed long needlessly capped callers at ~2.147GB.
-    if (!PyArg_ParseTuple(args, "sk|k", &log_dir, &rotate_bytes, &max_total_bytes))
+    // rotate_bytes: "k"/"unsigned long" rather than "l"/"long", since it's
+    // a byte count, never negative, and size_t here is already an
+    // unsigned 32-bit type on this platform (~4.29GB): a single rotated
+    // log file this large is not a realistic case anyway, and a
+    // FAT-formatted card cannot hold a single file that big regardless.
+    //
+    // max_total_bytes: "K"/"unsigned long long" instead, since it is
+    // parsed into a genuinely 64-bit type on the C side
+    // (PRUserial485_sniffer_start's uint64_t): the whole point of
+    // widening it was to let this total exceed the ~4.29GB a 32-bit
+    // size_t can hold, since real storage this quota bounds routinely
+    // does. Parsing it as "k" here would undo that by truncating back to
+    // 32 bits before the call even happens.
+    if (!PyArg_ParseTuple(args, "sk|K", &log_dir, &rotate_bytes, &max_total_bytes))
     {
         return NULL;
     }
 
-    return Py_BuildValue("i", PRUserial485_sniffer_start(log_dir, (size_t)rotate_bytes, (size_t)max_total_bytes));
+    return Py_BuildValue("i", PRUserial485_sniffer_start(log_dir, (size_t)rotate_bytes, (uint64_t)max_total_bytes));
 }
 
 

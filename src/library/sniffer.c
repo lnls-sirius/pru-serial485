@@ -154,8 +154,10 @@ static char   sniffer_log_current_name[256];
 static size_t sniffer_log_bytes_written = 0;
 static size_t sniffer_rotate_bytes = 0;
 
-// 0 = unlimited; total across all rotated files
-static size_t sniffer_max_total_bytes = 0;
+// 0 = unlimited; total across all rotated files. uint64_t rather than
+// size_t: size_t is only 32 bits on this platform (~4.29GB ceiling),
+// but storage this quota is meant to bound routinely exceeds that.
+static uint64_t sniffer_max_total_bytes = 0;
 
 // Only ever written by the capture thread, but also read by the writer
 // thread (sniffer_log_emit_queue_overflow) to annotate an event with the
@@ -300,7 +302,7 @@ static void sniffer_log_make_room(void) {
         char oldest[256];
         char path[800];
         struct stat st;
-        size_t total = 0;
+        uint64_t total = 0;
         int have_oldest = 0;
 
         dir = opendir(sniffer_log_dir);
@@ -317,7 +319,7 @@ static void sniffer_log_make_room(void) {
             if(stat(path, &st) != 0) {
                 continue;
             }
-            total += (size_t)st.st_size;
+            total += (uint64_t)st.st_size;
 
             if(strcmp(entry->d_name, sniffer_log_current_name) == 0) {
                 // never a deletion candidate while active
@@ -340,8 +342,9 @@ static void sniffer_log_make_room(void) {
         }
 
         snprintf(path, sizeof(path), "%s/%s", sniffer_log_dir, oldest);
-        fprintf(stderr, "[PRUserial485 sniffer] total log budget of %zu bytes exceeded, "
-                        "deleting oldest log %s\n", sniffer_max_total_bytes, oldest);
+        fprintf(stderr, "[PRUserial485 sniffer] total log budget of %llu bytes exceeded, "
+                        "deleting oldest log %s\n",
+                        (unsigned long long)sniffer_max_total_bytes, oldest);
         unlink(path);
     }
 }
@@ -782,7 +785,7 @@ static void *sniffer_capture_thread(void *arg) {
 }
 
 
-int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t max_total_bytes) {
+int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, uint64_t max_total_bytes) {
     // Must be checked before anything else: running the sniffer on a
     // Master or plain Slave connection would apply Passive-mode
     // assumptions (see this file's top comment) to a connection that

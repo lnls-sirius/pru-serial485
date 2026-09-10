@@ -384,7 +384,9 @@ extern volatile uint32_t sniffer_lenfifo_snapshot;
  * max_total_bytes: tamanho maximo (em bytes) somado de todos os arquivos
  * de log neste diretorio. Se excedido, os arquivos mais antigos sao
  * apagados (o arquivo em uso nunca e apagado) ate caber no limite:
- * captura circular, nunca para de gravar. Se 0, sem limite.
+ * captura circular, nunca para de gravar. Se 0, sem limite. Tipo de 64
+ * bits mesmo nesta plataforma de 32 bits, entao aceita valores acima de
+ * 4GiB sem estourar, ao contrario de rotate_bytes.
  *
  * --Retorno--
  * OK
@@ -394,7 +396,7 @@ extern volatile uint32_t sniffer_lenfifo_snapshot;
  * ERR_SNIFFER_THREAD_CREATE    : falha ao criar a thread de captura
  *
 */
-int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, size_t max_total_bytes);
+int PRUserial485_sniffer_start(const char *log_dir, size_t rotate_bytes, uint64_t max_total_bytes);
 
 
 
