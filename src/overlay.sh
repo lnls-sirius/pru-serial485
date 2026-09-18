@@ -2,7 +2,22 @@
 
 
 #DDR size for PRU serial interface: 2 097 152 bytes
-modprobe uio_pruss extram_pool_sz=0x200000
+DESIRED_POOL_SIZE="0x00200000"
+MAP1_SIZE_FILE="/sys/class/uio/uio0/maps/map1/size"
+
+if [ -f "$MAP1_SIZE_FILE" ]; then
+    CURRENT_POOL_SIZE=$(cat "$MAP1_SIZE_FILE")
+    if [ "$CURRENT_POOL_SIZE" = "$DESIRED_POOL_SIZE" ]; then
+        echo "uio_pruss extram pool already correctly sized ($CURRENT_POOL_SIZE), skipping reload."
+    else
+        echo "uio_pruss extram pool wrong size ($CURRENT_POOL_SIZE), forcing reload..."
+        rmmod -f uio_pruss
+        modprobe uio_pruss extram_pool_sz=0x200000
+    fi
+else
+    echo "uio_pruss not loaded yet, loading with correct pool size..."
+    modprobe uio_pruss extram_pool_sz=0x200000
+fi
 
 KERNEL_VERSION=`uname -r`;
 if [ "${KERNEL_VERSION%.*}" = "3.8" ]; then
