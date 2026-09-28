@@ -1,5 +1,13 @@
 #!/bin/sh
 
+PRUSS_CONF="/etc/modprobe.d/uio_pruss.conf"
+PRUSS_OPTIONS="options uio_pruss extram_pool_sz=0x200000"
+
+# Ensure modprobe.d is correctly configured
+if [ ! -f "$PRUSS_CONF" ] || [ "$(cat "$PRUSS_CONF")" != "$PRUSS_OPTIONS" ]; then
+    echo "Configuring $PRUSS_CONF"
+    echo "$PRUSS_OPTIONS" > "$PRUSS_CONF"
+fi
 
 # DDR size for PRU serial interface: 2 097 152 bytes
 modprobe uio_pruss extram_pool_sz=0x200000
